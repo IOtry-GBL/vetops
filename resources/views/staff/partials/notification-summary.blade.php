@@ -18,6 +18,12 @@
     </article>
 
     <article class="notification-summary-card">
+        <span class="summary-label">Adherence</span>
+        <strong>{{ $adherenceNotifications->count() }}</strong>
+        <p class="notification-section-copy">Medication doses confirmed as taken in the live window.</p>
+    </article>
+
+    <article class="notification-summary-card">
         <span class="summary-label">Live Alerts</span>
         <strong>{{ $totalLiveAlerts }}</strong>
         <p class="notification-section-copy">Current appointment updates shown in this live feed.</p>

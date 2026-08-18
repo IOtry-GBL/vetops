@@ -16,7 +16,7 @@ return new class extends Migration
             $table->text('ai_guidance_summary')->nullable();
             $table->text('consultation_notes')->nullable();
             $table->dateTime('consultation_date')->notNullable();
-            $table->enum('status', ['Open', 'Completed', 'Follow-up'])->notNullable();
+            $table->enum('status', ['Open', 'In Progress', 'Completed', 'Missed', 'Follow-up'])->notNullable();
             $table->timestamps();
         });
     }

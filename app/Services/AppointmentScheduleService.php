@@ -12,6 +12,28 @@ class AppointmentScheduleService
 {
     public const WORKING_HOURS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
 
+    public static function calendarBookings(): array
+    {
+        return Appointment::query()
+            ->activeEntries()
+            ->with(['pet.owner'])
+            ->orderBy('appointment_date')
+            ->orderBy('appointment_time')
+            ->get()
+            ->map(function (Appointment $appointment) {
+                return [
+                    'appointment_id' => $appointment->appointment_id,
+                    'date' => $appointment->appointment_date->format('Y-m-d'),
+                    'time' => $appointment->appointment_time->format('H:i'),
+                    'status' => $appointment->status,
+                    'client_name' => $appointment->pet?->owner?->name ?? 'Unknown client',
+                    'pet_name' => $appointment->pet?->name ?? 'Unknown pet',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
     public static function bookedAppointments(?int $ignoreAppointmentId = null): array
     {
         return Appointment::query()
@@ -46,11 +68,6 @@ class AppointmentScheduleService
         $time = $request->input('appointment_time');
 
         if (!$date || !$time) {
-            return;
-        }
-
-        if (!in_array($time, self::WORKING_HOURS, true)) {
-            $validator->errors()->add('appointment_time', 'Choose one of the available clinic time slots.');
             return;
         }
 

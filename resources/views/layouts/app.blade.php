@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'VetCare Clinic')</title>
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -160,11 +161,11 @@
 
         .app-main {
             min-width: 0;
+            overflow: visible;
         }
 
         .topbar {
-            position: sticky;
-            top: 1.5rem;
+            position: relative;
             z-index: 20;
             display: flex;
             align-items: center;
@@ -177,6 +178,7 @@
             background: rgba(255, 255, 255, 0.76);
             backdrop-filter: blur(18px);
             box-shadow: 0 16px 38px rgba(23, 49, 61, 0.09);
+            overflow: visible;
         }
 
         .topbar-copy {
@@ -199,6 +201,7 @@
 
         .profile-menu {
             position: relative;
+            z-index: 50;
         }
 
         .profile-menu summary {
@@ -257,6 +260,7 @@
             border-radius: var(--shell-radius-md);
             background: rgba(255, 255, 255, 0.98);
             box-shadow: 0 22px 48px rgba(23, 49, 61, 0.16);
+            z-index: 50;
         }
 
         .dropdown-link,
@@ -296,6 +300,7 @@
         .widget,
         .surface {
             position: relative;
+            min-width: 0;
             background: var(--shell-panel);
             border: 1px solid rgba(255, 255, 255, 0.54);
             border-radius: var(--shell-radius-xl);
@@ -839,6 +844,131 @@
             border-bottom: none;
         }
 
+        .super-admin-page {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        .super-admin-section {
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .super-admin-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.9rem;
+            flex-wrap: wrap;
+        }
+
+        .super-admin-list-shell {
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .super-admin-list-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .super-admin-list-toolbar .form-control,
+        .super-admin-list-toolbar .form-select {
+            min-width: 220px;
+        }
+
+        .super-admin-list-toolbar .toolbar-group {
+            display: flex;
+            gap: 0.65rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .super-admin-sort-button {
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #334155;
+            padding: 0.35rem 0.7rem;
+            font-size: 0.84rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .super-admin-sort-button.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        .super-admin-list-item {
+            padding: 0.95rem 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.9rem;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+
+        .super-admin-list-item .meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+
+        .scrollable-compact-list {
+            display: grid;
+            gap: 0.75rem;
+            max-height: 25.5rem;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+
+        .scrollable-compact-list::-webkit-scrollbar {
+            width: 0.45rem;
+        }
+
+        .scrollable-compact-list::-webkit-scrollbar-thumb {
+            background: rgba(23, 49, 61, 0.2);
+            border-radius: 999px;
+        }
+
+        .super-admin-pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .super-admin-pagination button {
+            padding: 0.45rem 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.65rem;
+            background: #fff;
+            color: #111827;
+            cursor: pointer;
+        }
+
+        .super-admin-pagination button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .super-admin-empty-state {
+            padding: 1rem;
+            color: #6b7280;
+            border: 1px dashed #d1d5db;
+            border-radius: 0.85rem;
+            background: #f8fafc;
+        }
+
         @media (max-width: 1100px) {
             .app-shell {
                 grid-template-columns: 1fr;
@@ -856,42 +986,345 @@
 
         @media (max-width: 768px) {
             .app-shell {
+                grid-template-columns: 1fr;
                 padding: 1rem;
                 gap: 1rem;
+                min-height: 100vh;
             }
 
-            .topbar,
-            .hero-row,
-            .section-head,
-            .split-head,
-            .action-row,
-            .list-card,
-            .record-card,
-            .session-card,
-            .appointment-card {
-                flex-direction: column;
+            .app-sidebar {
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                min-height: auto;
+                padding: 1rem;
+                border-radius: var(--shell-radius-lg);
+                margin-bottom: 1rem;
+            }
+
+            .sidebar-brand {
+                padding-bottom: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .sidebar-brand strong {
+                font-size: 1rem;
+            }
+
+            .sidebar-brand span {
+                display: none;
+            }
+
+            .sidebar-nav {
+                display: flex;
+                gap: 0.5rem;
+                padding-top: 0;
+                overflow-x: auto;
+            }
+
+            .sidebar-item {
+                padding: 0.75rem 1rem;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            .sidebar-foot {
+                display: none;
+            }
+
+            .topbar {
+                position: relative;
+                z-index: 30;
+                padding: 0.85rem 1rem;
+                margin-bottom: 1rem;
+                gap: 0.75rem;
+                overflow: visible;
+            }
+
+            .topbar-copy {
+                gap: 0.1rem;
+            }
+
+            .topbar-eyebrow {
+                font-size: 0.7rem;
+            }
+
+            .topbar-title {
+                font-size: 1.1rem;
+            }
+
+            .profile-menu summary {
+                padding: 0.5rem;
+                gap: 0.5rem;
+            }
+
+            .profile-avatar {
+                width: 2.2rem;
+                height: 2.2rem;
+                font-size: 0.9rem;
             }
 
             .profile-meta {
                 display: none;
             }
 
-            .app-sidebar {
-                padding: 1rem;
+            .profile-dropdown {
+                min-width: 200px;
+                right: -10px;
+                z-index: 60;
             }
 
-            .sidebar-nav {
-                grid-template-columns: 1fr;
+            .page-content {
+                gap: 1rem;
             }
 
             .hero-card,
             .card {
-                padding: 1.2rem;
+                padding: 1rem;
+            }
+
+            .hero-title {
+                font-size: 1.5rem;
+            }
+
+            .hero-copy {
+                font-size: 0.95rem;
+            }
+
+            .btn {
+                min-height: 44px;
+                padding: 0.7rem 1rem;
+                font-size: 0.95rem;
+            }
+
+            .grid,
+            .stat-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .metric-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .widget,
+            .metric-card,
+            .stat-card,
+            .detail-card {
+                padding: 0.9rem;
+            }
+
+            .widget-title,
+            .metric-label,
+            .detail-label {
+                font-size: 0.7rem;
+            }
+
+            .widget-value,
+            .metric-value {
+                font-size: clamp(1.4rem, 2vw, 2rem);
+            }
+
+            .list-card,
+            .record-card,
+            .session-card,
+            .appointment-card {
+                flex-direction: column;
+                padding: 1rem;
+                gap: 0.75rem;
+            }
+
+            .item-title {
+                font-size: 0.95rem;
+            }
+
+            .item-meta {
+                gap: 0.4rem;
+                margin-top: 0.5rem;
+            }
+
+            .pill,
+            .badge,
+            .status-badge,
+            .status-pill {
+                min-height: 28px;
+                padding: 0.3rem 0.7rem;
+                font-size: 0.7rem;
+            }
+
+            .field-control,
+            .form-field {
+                min-height: 44px;
+                padding: 0.8rem;
+                font-size: 1rem;
+            }
+
+            textarea.field-control,
+            textarea.form-field {
+                min-height: 120px;
+            }
+
+            .field-label,
+            .form-label {
+                font-size: 0.9rem;
+            }
+
+            .banner,
+            .alert {
+                padding: 0.85rem;
+                font-size: 0.9rem;
+            }
+
+            .hero-row,
+            .section-head,
+            .split-head,
+            .action-row,
+            .surface-header {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .workspace-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .thread-link {
+                gap: 0.5rem;
+                padding: 0.85rem;
+            }
+
+            .thread-link-copy {
+                gap: 0.15rem;
+            }
+
+            .detail-grid-compact {
+                grid-template-columns: 1fr;
+                gap: 0.7rem;
+            }
+
+            .message-stream {
+                max-height: 400px;
+            }
+
+            .message-bubble {
+                max-width: 100%;
+                padding: 0.85rem;
+                font-size: 0.95rem;
+            }
+
+            .composer-card {
+                padding: 0.85rem;
+            }
+
+            .summary-panel {
+                padding: 0.85rem;
+            }
+
+            .app-table th,
+            .app-table td {
+                padding: 0.75rem;
+                font-size: 0.85rem;
+            }
+
+            .app-table th {
+                font-size: 0.7rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .app-shell {
+                padding: 0.75rem;
+                gap: 0.75rem;
+            }
+
+            .topbar {
+                padding: 0.7rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .topbar-title {
+                font-size: 1rem;
+            }
+
+            .sidebar-nav {
+                gap: 0.35rem;
+            }
+
+            .sidebar-item {
+                padding: 0.65rem 0.8rem;
+                font-size: 0.85rem;
+            }
+
+            .hero-title {
+                font-size: 1.3rem;
+            }
+
+            .btn {
+                width: 100%;
+                min-height: 44px;
+            }
+
+            .widget-value,
+            .metric-value {
+                font-size: clamp(1.2rem, 1.8vw, 1.8rem);
+            }
+
+            .grid,
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .hero-card,
+            .card {
+                padding: 0.9rem;
+            }
+
+            .hero-card::after {
+                inset: auto -2rem -2rem auto;
+                width: 8rem;
+                height: 8rem;
+            }
+
+            .field-control,
+            .form-field {
+                font-size: 16px;
+            }
+
+            .dropdown-link,
+            .dropdown-button {
+                padding: 0.75rem 0.8rem;
+                font-size: 0.9rem;
+            }
+
+            .message-stream {
+                max-height: 300px;
+            }
+
+            .list-card,
+            .record-card,
+            .session-card,
+            .appointment-card {
+                padding: 0.85rem;
+            }
+
+            .thread-link {
+                padding: 0.75rem;
             }
         }
     </style>
+    @stack('styles')
     @yield('styles')
-    @stack('appointment-picker-styles')
 </head>
 <body>
     @php
@@ -1086,7 +1519,188 @@
             document.addEventListener('keydown', handleEsc);
         }
     </script>
-    @stack('appointment-picker-scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('[data-super-admin-list]').forEach((root) => {
+                const searchInput = root.querySelector('[data-super-admin-search]');
+                const filterSelects = Array.from(root.querySelectorAll('[data-super-admin-filter]'));
+                const sortButtons = Array.from(root.querySelectorAll('[data-super-admin-sort]'));
+                const pageSizeSelect = root.querySelector('[data-super-admin-page-size]');
+                const items = Array.from(root.querySelectorAll('[data-super-admin-item]'));
+                const countLabel = root.querySelector('[data-super-admin-count]');
+                const pageInfo = root.querySelector('[data-super-admin-page-info]');
+                const prevButton = root.querySelector('[data-super-admin-prev]');
+                const nextButton = root.querySelector('[data-super-admin-next]');
+                const resetButton = root.querySelector('[data-super-admin-reset]');
+
+                if (items.length === 0) {
+                    return;
+                }
+
+                let currentPage = 1;
+                let currentSortKey = root.dataset.defaultSort || '';
+                let currentSortDirection = root.dataset.defaultDirection || 'asc';
+
+                const getValue = (item, key) => (item.dataset[key] || '').trim().toLowerCase();
+
+                const applyFilters = (rows) => {
+                    let filtered = [...rows];
+
+                    if (searchInput) {
+                        const query = searchInput.value.trim().toLowerCase();
+                        if (query) {
+                            filtered = filtered.filter((item) => (item.dataset.searchText || '').includes(query));
+                        }
+                    }
+
+                    filterSelects.forEach((select) => {
+                        const key = select.dataset.superAdminFilter;
+                        const value = select.value;
+                        if (key && value && value !== 'all') {
+                            filtered = filtered.filter((item) => (item.dataset[key] || '').toLowerCase() === value.toLowerCase());
+                        }
+                    });
+
+                    return filtered;
+                };
+
+                const applySort = (rows) => {
+                    if (!currentSortKey) {
+                        return rows;
+                    }
+
+                    return [...rows].sort((a, b) => {
+                        const left = getValue(a, currentSortKey);
+                        const right = getValue(b, currentSortKey);
+
+                        const leftNumber = Number(left);
+                        const rightNumber = Number(right);
+                        const isNumeric = !Number.isNaN(leftNumber) && !Number.isNaN(rightNumber);
+                        const comparison = isNumeric
+                            ? leftNumber - rightNumber
+                            : left.localeCompare(right);
+
+                        return currentSortDirection === 'desc' ? -comparison : comparison;
+                    });
+                };
+
+                const render = () => {
+                    const filtered = applySort(applyFilters(items));
+                    const pageSize = parseInt(pageSizeSelect?.value || root.dataset.pageSize || '8', 10);
+                    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+                    currentPage = Math.min(currentPage, totalPages);
+                    const start = (currentPage - 1) * pageSize;
+                    const end = start + pageSize;
+
+                    items.forEach((item) => {
+                        item.style.display = 'none';
+                    });
+
+                    filtered.slice(start, end).forEach((item) => {
+                        item.style.display = 'block';
+                    });
+
+                    if (countLabel) {
+                        countLabel.textContent = filtered.length > 0
+                            ? `Showing ${Math.min(end, filtered.length)} of ${filtered.length} records`
+                            : 'No records found';
+                    }
+
+                    if (pageInfo) {
+                        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                    }
+
+                    if (prevButton) {
+                        prevButton.disabled = currentPage === 1;
+                    }
+
+                    if (nextButton) {
+                        nextButton.disabled = currentPage >= totalPages;
+                    }
+                };
+
+                searchInput?.addEventListener('input', () => {
+                    currentPage = 1;
+                    render();
+                });
+
+                filterSelects.forEach((select) => {
+                    select.addEventListener('change', () => {
+                        currentPage = 1;
+                        render();
+                    });
+                });
+
+                sortButtons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const key = button.dataset.superAdminSort;
+                        if (!key) {
+                            return;
+                        }
+
+                        if (currentSortKey === key) {
+                            currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            currentSortKey = key;
+                            currentSortDirection = 'asc';
+                        }
+
+                        sortButtons.forEach((candidate) => {
+                            candidate.classList.toggle('active', candidate === button);
+                        });
+
+                        currentPage = 1;
+                        render();
+                    });
+                });
+
+                pageSizeSelect?.addEventListener('change', () => {
+                    currentPage = 1;
+                    render();
+                });
+
+                resetButton?.addEventListener('click', () => {
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+                    filterSelects.forEach((select) => {
+                        select.value = 'all';
+                    });
+                    currentSortKey = root.dataset.defaultSort || '';
+                    currentSortDirection = root.dataset.defaultDirection || 'asc';
+                    sortButtons.forEach((button) => {
+                        button.classList.toggle('active', button.dataset.superAdminSort === currentSortKey);
+                    });
+                    currentPage = 1;
+                    render();
+                });
+
+                if (prevButton) {
+                    prevButton.addEventListener('click', () => {
+                        if (currentPage > 1) {
+                            currentPage -= 1;
+                            render();
+                        }
+                    });
+                }
+
+                if (nextButton) {
+                    nextButton.addEventListener('click', () => {
+                        currentPage += 1;
+                        render();
+                    });
+                }
+
+                sortButtons.forEach((button) => {
+                    button.classList.toggle('active', button.dataset.superAdminSort === currentSortKey);
+                });
+
+                render();
+            });
+        });
+    </script>
+
+    @stack('scripts')
     @yield('scripts')
 </body>
 </html>

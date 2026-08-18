@@ -3,36 +3,45 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\AppointmentNotification;
 use App\Models\Consultation;
 use App\Models\EPrescription;
 use App\Models\MedicalRecord;
 use App\Models\Pet;
-use App\Models\SymptomLog;
 use App\Models\AdherenceLog;
-use App\Models\User;
 use App\Services\AdherenceService;
 use App\Services\AppointmentScheduleService;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class VeterinarianController extends Controller
 {
+    private function currentVetId(): int
+    {
+        return (int) Auth::id();
+    }
+
+    private function vetAppointmentsQuery()
+    {
+        return Appointment::with(['pet.owner', 'consultation.veterinarian'])
+            ->where(function ($query) {
+                $query->whereHas('consultation', function ($consultationQuery) {
+                    $consultationQuery->where('veterinarian_id', $this->currentVetId());
+                })->orWhereDoesntHave('consultation');
+            });
+    }
+
     /**
      * Display the veterinarian dashboard
      */
     public function dashboard()
     {
         $vet = Auth::user();
-        
-        // Get emergency symptom logs
-        $emergencies = SymptomLog::where('concern_level', 'emergency')->get();
-        
-        // Get high priority/triage cases
-        $triage = SymptomLog::where('concern_level', 'emergency')->orWhere('concern_level', 'vet_visit')->get();
+        $vetId = $this->currentVetId();
 
-        // Get medication adherence metrics
         $prescriptions = EPrescription::with([
             'adherenceLogs' => fn ($q) => $q->orderByDesc('scheduled_datetime'),
         ])->get();
@@ -43,94 +52,98 @@ class VeterinarianController extends Controller
             ? round(($prescriptionsWithLogs / $totalPrescriptions) * 100, 2)
             : 0;
 
-        $recentAppointments = Appointment::with('pet.owner')
-            ->whereHas('consultation', fn ($query) => $query->where('veterinarian_id', $vet->id))
-            ->orderByDesc('appointment_date')
-            ->orderByDesc('appointment_time')
-            ->limit(10)
+        $todayAppointments = $this->vetAppointmentsQuery()
+            ->whereDate('appointment_date', today())
+            ->whereIn('status', ['Pending', 'Approved', 'Rescheduled'])
+            ->count();
+
+        $upcomingAppointments = $this->vetAppointmentsQuery()
+            ->whereDate('appointment_date', '>=', today())
+            ->whereIn('status', ['Pending', 'Approved', 'Rescheduled'])
+            ->orderBy('appointment_date')
+            ->orderBy('appointment_time')
+            ->limit(5)
             ->get();
 
-        $recentMedicalRecords = MedicalRecord::with('pet.owner')
-            ->orderByDesc('created_at')
-            ->limit(10)
+        $recentConsultations = Consultation::with(['appointment.pet.owner', 'veterinarian'])
+            ->where('veterinarian_id', $vetId)
+            ->latest('consultation_date')
+            ->limit(5)
             ->get();
 
         $recentPrescriptions = EPrescription::with('medicalRecord.pet.owner')
-            ->orderByDesc('issued_at')
-            ->limit(10)
+            ->whereHas('medicalRecord.consultation', function ($query) use ($vetId) {
+                $query->where('veterinarian_id', $vetId);
+            })
+            ->latest('issued_at')
+            ->limit(5)
             ->get();
 
+        $lowAdherenceCases = EPrescription::with(['medicalRecord.pet.owner', 'adherenceLogs'])
+            ->whereHas('medicalRecord.consultation', function ($query) use ($vetId) {
+                $query->where('veterinarian_id', $vetId);
+            })
+            ->get()
+            ->filter(function (EPrescription $prescription) {
+                if ($prescription->adherenceLogs->isEmpty()) {
+                    return true;
+                }
+
+                $taken = $prescription->adherenceLogs->where('intake_status', 'Taken')->count();
+                $total = $prescription->adherenceLogs->count();
+
+                return $total > 0 && ($taken / $total) < 0.7;
+            })
+            ->take(5)
+            ->values();
+
         return view('veterinarian.dashboard', compact(
-            'emergencies', 
-            'triage',
             'adherenceRate',
             'totalPrescriptions',
-            'recentAppointments',
-            'recentMedicalRecords',
-            'recentPrescriptions'
+            'todayAppointments',
+            'upcomingAppointments',
+            'recentConsultations',
+            'recentPrescriptions',
+            'lowAdherenceCases'
         ));
     }
 
-    /**
-     * Display appointment management
-     */
+   
     
     public function appointments(Request $request)
     {
-        $search = trim((string) $request->query('search', ''));
-        $seeAll = $request->boolean('see_all');
-        $appointmentScope = function ($query) {
-            $query->where(function ($query) {
-                $query->whereHas('consultation', function ($consultationQuery) {
-                    $consultationQuery->where('veterinarian_id', Auth::id());
-                })->orWhereDoesntHave('consultation');
-            });
-        };
-        $searchScope = function ($query) use ($search) {
-            if ($search === '') {
-                return;
-            }
+        $filter = $request->query('filter', 'all'); // 'today' or 'all'
 
-            $query->where(function ($searchQuery) use ($search) {
-                $searchQuery->where('reason_for_visit', 'like', "%{$search}%")
-                    ->orWhere('consultation_mode', 'like', "%{$search}%")
-                    ->orWhereHas('pet', function ($petQuery) use ($search) {
-                        $petQuery->where('pet_name', 'like', "%{$search}%")
-                            ->orWhere('species', 'like', "%{$search}%")
-                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
-                    });
-            });
-        };
+        $query = $this->vetAppointmentsQuery();
 
-        $pendingAppointments = Appointment::with(['pet.owner'])
-            ->where($appointmentScope)
-            ->where($searchScope)
+        if ($filter === 'today') {
+            $today = now()->toDateString();
+            $query->whereDate('appointment_date', $today);
+        }
+
+        $pendingAppointments = (clone $query)
             ->where('status', 'Pending')
             ->orderBy('appointment_date')
             ->orderBy('appointment_time')
-            ->when(!$seeAll, fn ($query) => $query->limit(10))
             ->get();
 
-        $approvedAppointments = Appointment::with(['pet.owner'])
-            ->where($appointmentScope)
-            ->where($searchScope)
+        $approvedAppointments = (clone $query)
             ->where('status', 'Approved')
             ->orderBy('appointment_date')
             ->orderBy('appointment_time')
-            ->when(!$seeAll, fn ($query) => $query->limit(10))
             ->get();
 
-        $totalPendingAppointments = Appointment::where($appointmentScope)
-            ->where($searchScope)
-            ->where('status', 'Pending')
+        $todayAppointmentsCount = $this->vetAppointmentsQuery()
+            ->whereDate('appointment_date', today())
+            ->whereIn('status', ['Pending', 'Approved', 'Rescheduled'])
             ->count();
 
-        $totalApprovedAppointments = Appointment::where($appointmentScope)
-            ->where($searchScope)
-            ->where('status', 'Approved')
+        $upcomingAppointmentsCount = $this->vetAppointmentsQuery()
+            ->whereDate('appointment_date', '>=', today())
+            ->whereIn('status', ['Pending', 'Approved', 'Rescheduled'])
             ->count();
 
-        return view('veterinarian.appointments', compact('pendingAppointments', 'approvedAppointments', 'totalPendingAppointments', 'totalApprovedAppointments', 'search', 'seeAll'));
+        return view('veterinarian.appointments', compact('pendingAppointments', 'approvedAppointments', 'filter', 'todayAppointmentsCount', 'upcomingAppointmentsCount'));
     }
 
     /**
@@ -138,78 +151,41 @@ class VeterinarianController extends Controller
      */
     public function medicalRecords(Request $request)
     {
-        $search = trim((string) $request->query('search', ''));
-        $seeAll = $request->boolean('see_all');
-
-        $recordsQuery = MedicalRecord::with([
+        $medicalRecords = MedicalRecord::with([
             'pet.owner',
-            'prescriptions' => fn ($query) => $query->orderByDesc('issued_at'),
-        ])->when($search !== '', function ($query) use ($search) {
-            $query->where(function ($searchQuery) use ($search) {
-                $searchQuery->where('diagnosis', 'like', "%{$search}%")
-                    ->orWhere('treatment_plan', 'like', "%{$search}%")
-                    ->orWhere('vaccination_notes', 'like', "%{$search}%")
-                    ->orWhereHas('pet', function ($petQuery) use ($search) {
-                        $petQuery->where('pet_name', 'like', "%{$search}%")
-                            ->orWhere('species', 'like', "%{$search}%")
-                            ->orWhere('breed', 'like', "%{$search}%")
-                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
-                    });
-            });
-        })->orderByDesc('created_at');
+            'consultation.veterinarian',
+            'prescriptions' => fn ($query) => $query->with([
+                'adherenceLogs' => fn ($adherenceQuery) => $adherenceQuery->orderByDesc('scheduled_datetime'),
+            ])->orderByDesc('issued_at'),
+        ])->orderByDesc('updated_at')->orderByDesc('created_at')->get();
 
-        $allMedicalRecords = (clone $recordsQuery)->get();
-        $medicalRecords = (clone $recordsQuery)
-            ->when(!$seeAll, fn ($query) => $query->limit(10))
-            ->get();
+        $patients = $medicalRecords->pluck('pet')
+            ->filter()
+            ->unique('pet_id')
+            ->sortByDesc(function (Pet $pet) use ($medicalRecords) {
+                return optional($medicalRecords->firstWhere('pet_id', $pet->pet_id))->updated_at?->timestamp ?? 0;
+            })
+            ->values();
 
-        $owners = User::whereHas('pets.medicalRecords')
-            ->with(['pets' => fn ($query) => $query->whereHas('medicalRecords')->orderBy('pet_name')])
-            ->orderBy('full_name')
-            ->get();
-
-        $patients = $owners->flatMap->pets->unique('pet_id')->values();
-        $requestedPatientId = (int) ($request->query('pet') ?: $request->query('patient'));
-        $selectedPetFromPatientParam = $requestedPatientId
-            ? $patients->firstWhere('pet_id', $requestedPatientId)
-            : null;
-
-        $selectedOwner = $selectedPetFromPatientParam?->owner
-            ?? ($request->query('owner')
-                ? $owners->firstWhere('user_id', (int) $request->query('owner'))
-                : null);
-
-        $ownerPets = $selectedOwner?->pets ?? collect();
-        $selectedPet = $selectedPetFromPatientParam
-            ?? ($request->query('pet')
-                ? $ownerPets->firstWhere('pet_id', (int) $request->query('pet'))
-                : null);
-        $selectedPatient = $selectedPet;
-
-        $selectedPatientRecords = $selectedPet
-            ? $allMedicalRecords->where('pet_id', $selectedPet->pet_id)->values()
-            : collect();
-        $selectedPatientRecordsPreview = $seeAll ? $selectedPatientRecords : $selectedPatientRecords->take(10);
-
-        $selectedPatientPrescriptionCount = $selectedPatientRecords->sum(
-            fn (MedicalRecord $record) => $record->prescriptions->count()
-        );
-
-        return view('veterinarian.medical-records', compact(
+        return view('medical-records.veterinarian-index', compact(
             'medicalRecords',
-            'allMedicalRecords',
-            'owners',
-            'selectedOwner',
-            'ownerPets',
-            'selectedPet',
-            'patients',
-            'selectedPatient',
-            'selectedPatientRecords',
-            'selectedPatientRecordsPreview',
-            'selectedPatientPrescriptionCount',
-            'search',
-            'seeAll'
+            'patients'
         ));
+    }
+
+    public function medicalRecordDetails(MedicalRecord $record)
+    {
+        $record->load([
+            'pet.owner',
+            'consultation.veterinarian',
+            'prescriptions' => fn ($query) => $query->with([
+                'adherenceLogs' => fn ($adherenceQuery) => $adherenceQuery->orderByDesc('scheduled_datetime'),
+            ])->orderByDesc('issued_at'),
+        ]);
+
+        return view('medical-records.veterinarian-details', [
+            'record' => $record,
+        ]);
     }
 
     /**
@@ -217,21 +193,10 @@ class VeterinarianController extends Controller
      */
     public function prescriptions(Request $request)
     {
-        $search = trim((string) $request->query('search', ''));
-        $seeAll = $request->boolean('see_all');
-
         $medicalRecords = MedicalRecord::with([
             'pet.owner',
             'prescriptions' => fn ($query) => $query->orderByDesc('issued_at'),
-        ])->when($search !== '', function ($query) use ($search) {
-            $query->where(function ($searchQuery) use ($search) {
-                $searchQuery->where('diagnosis', 'like', "%{$search}%")
-                    ->orWhereHas('pet', function ($petQuery) use ($search) {
-                        $petQuery->where('pet_name', 'like', "%{$search}%")
-                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
-                    });
-            });
-        })->orderByDesc('created_at')->get();
+        ])->orderByDesc('created_at')->get();
 
         $selectedRecord = $medicalRecords->firstWhere('record_id', (int) $request->query('record'));
 
@@ -239,30 +204,14 @@ class VeterinarianController extends Controller
             $selectedRecord = $medicalRecords->first();
         }
 
-        $prescriptionsQuery = EPrescription::with('medicalRecord.pet.owner')
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($searchQuery) use ($search) {
-                    $searchQuery->where('medication_name', 'like', "%{$search}%")
-                        ->orWhere('dosage', 'like', "%{$search}%")
-                        ->orWhere('frequency', 'like', "%{$search}%")
-                        ->orWhere('duration', 'like', "%{$search}%")
-                        ->orWhereHas('medicalRecord.pet', function ($petQuery) use ($search) {
-                            $petQuery->where('pet_name', 'like', "%{$search}%")
-                                ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
-                        });
-                });
-            })
-            ->orderByDesc('issued_at');
-
-        $totalPrescriptionRows = (clone $prescriptionsQuery)->count();
-        $prescriptions = (clone $prescriptionsQuery)
-            ->when(!$seeAll, fn ($query) => $query->limit(10))
+        $prescriptions = EPrescription::with('medicalRecord.pet.owner')
+            ->orderByDesc('issued_at')
             ->get();
 
         $patientCount = $medicalRecords->pluck('pet_id')->unique()->count();
-        $issuedTodayCount = EPrescription::whereDate('issued_at', today())->count();
+        $issuedTodayCount = $prescriptions->filter(fn (EPrescription $prescription) => $prescription->issued_at?->isToday())->count();
 
-        return view('veterinarian.prescriptions', compact('medicalRecords', 'selectedRecord', 'prescriptions', 'patientCount', 'issuedTodayCount', 'totalPrescriptionRows', 'search', 'seeAll'));
+        return view('veterinarian.prescriptions', compact('medicalRecords', 'selectedRecord', 'prescriptions', 'patientCount', 'issuedTodayCount'));
     }
 
     /**
@@ -293,37 +242,6 @@ class VeterinarianController extends Controller
 
         return redirect()->route('vet.prescriptions', ['record' => $medicalRecord->record_id])
             ->with('success', 'E-prescription created successfully.');
-    }
-
-    /**
-     * Update an existing e-prescription.
-     */
-    public function updatePrescription(Request $request, EPrescription $prescription)
-    {
-        $validator = Validator::make($request->all(), [
-            'medication_name' => 'required|string|max:100',
-            'dosage' => 'required|string|max:50',
-            'frequency' => 'required|string|max:50',
-            'duration' => 'required|string|max:50',
-        ]);
-
-        $validator->after(function ($validator) use ($request) {
-            $this->validatePrescriptionTimingInputs($validator, [
-                'frequency' => $request->input('frequency'),
-                'duration' => $request->input('duration'),
-            ]);
-        });
-
-        $validated = $validator->validate();
-        $prescription->update([
-            'medication_name' => trim((string) $validated['medication_name']),
-            'dosage' => trim((string) $validated['dosage']),
-            'frequency' => AdherenceService::normalizeFrequency($validated['frequency']),
-            'duration' => AdherenceService::normalizeDuration($validated['duration']),
-        ]);
-
-        return redirect()->route('vet.prescriptions', ['record' => $prescription->record_id])
-            ->with('success', 'E-prescription updated successfully.');
     }
 
     /**
@@ -386,13 +304,18 @@ class VeterinarianController extends Controller
             'remarks' => 'nullable|string|max:500',
         ]);
 
-        AdherenceLog::create([
-            'prescription_id' => $prescription->prescription_id,
-            'scheduled_datetime' => $validated['scheduled_datetime'],
-            'intake_status' => $validated['intake_status'],
-            'confirmation_time' => $validated['confirmation_time'],
-            'remarks' => $validated['remarks'],
-        ]);
+        // Use updateOrCreate to prevent duplicate logs for the same scheduled time
+        AdherenceLog::updateOrCreate(
+            [
+                'prescription_id' => $prescription->prescription_id,
+                'scheduled_datetime' => $validated['scheduled_datetime'],
+            ],
+            [
+                'intake_status' => $validated['intake_status'],
+                'confirmation_time' => $validated['confirmation_time'],
+                'remarks' => $validated['remarks'],
+            ]
+        );
 
         return back()->with('success', 'Medication adherence logged successfully.');
     }
@@ -404,9 +327,10 @@ class VeterinarianController extends Controller
     {
         $pets = Pet::with('owner')->get();
         $unavailablePetIds = Appointment::query()->activeEntries()->pluck('pet_id')->all();
-        $bookedAppointments = AppointmentScheduleService::bookedAppointments();
+        $calendarBookings = AppointmentScheduleService::calendarBookings();
+        $calendarSlots = AppointmentScheduleService::WORKING_HOURS;
 
-        return view('veterinarian.create-appointment', compact('pets', 'unavailablePetIds', 'bookedAppointments'));
+        return view('veterinarian.create-appointment', compact('pets', 'unavailablePetIds', 'calendarBookings', 'calendarSlots'));
     }
 
     /**
@@ -443,13 +367,7 @@ class VeterinarianController extends Controller
             'reason' => 'required|string|max:500',
             'status' => 'required|in:Pending,Approved,Rescheduled,Completed,Cancelled',
         ]);
-        $validator->after(function ($validator) use ($request) {
-            if ($request->filled('pet_id') && Appointment::petHasActiveEntry((int) $request->input('pet_id'))) {
-                return;
-            }
-
-            AppointmentScheduleService::validateSlot($validator, $request);
-        });
+        $validator->after(fn ($validator) => AppointmentScheduleService::validateSlot($validator, $request));
         $validated = $validator->validate();
 
         if (Appointment::petHasActiveEntry((int) $validated['pet_id'])) {
@@ -468,7 +386,12 @@ class VeterinarianController extends Controller
             'reason_for_visit' => $reason,
             'status' => $validated['status'],
         ]);
-
+        // Create initial notification for Pending appointment
+        try {
+            AppointmentNotification::recordStatus($appointment->appointment_id, 'Pending');
+        } catch (\Exception $e) {
+            \Log::error('Error creating pending appointment notification', ['error' => $e->getMessage()]);
+        }
         return redirect()->route('vet.appointments')->with('success', 'Appointment created successfully!');
     }
 
@@ -480,6 +403,11 @@ class VeterinarianController extends Controller
         $appointment->loadMissing('pet.owner');
 
         $consultation = $this->resolveAppointmentConsultation($appointment);
+
+        if ($consultation->status === 'Open') {
+            $consultation->update(['status' => 'In Progress']);
+            $consultation->refresh();
+        }
 
         $medicalRecord = MedicalRecord::with('prescriptions')
             ->where('consultation_id', $consultation->consultation_id)
@@ -553,47 +481,63 @@ class VeterinarianController extends Controller
 
         $validated = $validator->validate();
 
-        $consultation = $this->resolveAppointmentConsultation($appointment);
+        // Wrap entire operation in transaction to prevent partial saves
+        return DB::transaction(function () use ($validated, $appointment) {
+            $consultation = $this->resolveAppointmentConsultation($appointment);
 
-        $consultation->update([
-            'chief_complaint' => $validated['chief_complaint'],
-            'consultation_notes' => $validated['consultation_notes'] ?? null,
-            'consultation_date' => $consultation->consultation_date ?? $appointment->appointment_date ?? now(),
-            'status' => 'Completed',
-        ]);
+            $consultation->update([
+                'chief_complaint' => $validated['chief_complaint'],
+                'consultation_notes' => $validated['consultation_notes'] ?? null,
+                'consultation_date' => $consultation->consultation_date ?? $appointment->appointment_date ?? now(),
+                'status' => 'Completed',
+            ]);
 
-        $medicalRecord = MedicalRecord::updateOrCreate(
-            ['consultation_id' => $consultation->consultation_id],
-            [
-                'pet_id' => $appointment->pet_id,
-                'diagnosis' => $validated['diagnosis'],
-                'treatment_plan' => $validated['treatment_plan'],
-                'vaccination_notes' => $validated['vaccination_notes'] ?? null,
-                'follow_up_date' => $validated['follow_up_date'] ?? null,
-            ]
-        );
+            $medicalRecord = MedicalRecord::updateOrCreate(
+                ['consultation_id' => $consultation->consultation_id],
+                [
+                    'pet_id' => $appointment->pet_id,
+                    'diagnosis' => $validated['diagnosis'],
+                    'treatment_plan' => $validated['treatment_plan'],
+                    'vaccination_notes' => $validated['vaccination_notes'] ?? null,
+                    'follow_up_date' => $validated['follow_up_date'] ?? null,
+                ]
+            );
 
-        $prescriptions = collect($validated['prescriptions'] ?? [])
-            ->map(function (array $prescription) {
-                return [
-                    'medication_name' => trim((string) ($prescription['medication_name'] ?? '')),
-                    'dosage' => trim((string) ($prescription['dosage'] ?? '')),
-                    'frequency' => trim((string) ($prescription['frequency'] ?? '')),
-                    'duration' => trim((string) ($prescription['duration'] ?? '')),
-                ];
-            })
-            ->filter(fn (array $prescription) => collect($prescription)->filter()->isNotEmpty())
-            ->values();
+            $prescriptions = collect($validated['prescriptions'] ?? [])
+                ->map(function (array $prescription) {
+                    return [
+                        'medication_name' => trim((string) ($prescription['medication_name'] ?? '')),
+                        'dosage' => trim((string) ($prescription['dosage'] ?? '')),
+                        'frequency' => trim((string) ($prescription['frequency'] ?? '')),
+                        'duration' => trim((string) ($prescription['duration'] ?? '')),
+                    ];
+                })
+                ->filter(fn (array $prescription) => collect($prescription)->filter()->isNotEmpty())
+                ->values();
 
-        foreach ($prescriptions as $prescription) {
-            $this->issuePrescription($medicalRecord, $prescription);
-        }
+            foreach ($prescriptions as $prescription) {
+                $this->issuePrescription($medicalRecord, $prescription);
+            }
 
-        $appointment->update(['status' => 'Completed']);
+            $appointment->update(['status' => 'Completed']);
 
-        return redirect()
-            ->route('vet.appointments.session', $appointment)
-            ->with('success', 'Appointment session saved successfully.');
+            // Create new notification with 'Completed' status
+            try {
+                AppointmentNotification::recordStatus($appointment->appointment_id, 'Completed');
+                \Log::info('Appointment completion notification created', [
+                    'appointment_id' => $appointment->appointment_id,
+                ]);
+            } catch (\Exception $e) {
+                \Log::error('Error creating completion notification', [
+                    'error' => $e->getMessage(),
+                    'appointment_id' => $appointment->appointment_id,
+                ]);
+            }
+
+            return redirect()
+                ->route('vet.appointments.session', $appointment)
+                ->with('success', 'Appointment session saved successfully.');
+        });
     }
 
     /**
@@ -609,7 +553,13 @@ class VeterinarianController extends Controller
             abort(403, 'This appointment is assigned to another veterinarian.');
         }
 
+        $consultation ??= $this->resolveAppointmentConsultation($appointment);
+        $consultation->update(['status' => 'Missed']);
+
         $appointment->update(['status' => 'Missed']);
+
+        // Record the missed status for this appointment.
+        AppointmentNotification::recordStatus($appointment->appointment_id, 'Missed');
 
         return redirect()
             ->route('vet.appointments')

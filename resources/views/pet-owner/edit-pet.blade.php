@@ -4,7 +4,6 @@
     <a href="{{ route('pet-owner.dashboard') }}" class="sidebar-item"> Dashboard</a>
     <a href="{{ route('pet-owner.pets') }}" class="sidebar-item active"> My Pets</a>
     <a href="{{ route('pet-owner.appointments') }}" class="sidebar-item"> Appointments</a>
-
     <a href="{{ route('pet-owner.prescriptions') }}" class="sidebar-item"> Prescriptions</a>
     <a href="{{ route('pet-owner.notifications') }}" class="sidebar-item"> Notifications</a>
     <a href="#" class="sidebar-item" onclick="openPetCareAI(event)">Ask Pet Care AI</a>

@@ -160,4 +160,23 @@ class AdminController extends Controller
 
         return response()->json(['success' => true, 'message' => 'User created successfully']);
     }
+
+    /**
+     * Display all pets with filter by owner
+     */
+    public function pets()
+    {
+        $ownerId = request()->query('owner_id');
+        
+        $query = Pet::with('owner');
+        
+        if ($ownerId) {
+            $query->where('user_id', $ownerId);
+        }
+        
+        $pets = $query->paginate(20);
+        $owners = User::where('role', 'Pet Owner')->get();
+
+        return view('admin.pets', compact('pets', 'owners', 'ownerId'));
+    }
 }

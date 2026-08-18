@@ -13,7 +13,6 @@
         $missedCount = $complianceMap->get('Missed')->count ?? 0;
         $pendingCount = $complianceMap->get('Pending')->count ?? 0;
         $delayedCount = $complianceMap->get('Delayed')->count ?? 0;
-        $completedRate = $totalAppointments > 0 ? round(($completedAppointments / $totalAppointments) * 100) : 0;
     @endphp
 
     <section class="hero-card">
@@ -61,7 +60,7 @@
         <div class="surface-header">
             <div>
                 <h2>Appointments</h2>
-                <p class="section-copy">Volume and completion trends for the current reporting window.</p>
+                <p class="section-copy">Appointment volume and status totals for the current reporting window.</p>
             </div>
         </div>
 
@@ -79,8 +78,12 @@
                 <strong class="metric-value">{{ $completedAppointments }}</strong>
             </div>
             <div class="metric-card">
-                <span class="metric-label">Completion Rate</span>
-                <strong class="metric-value">{{ $completedRate }}%</strong>
+                <span class="metric-label">Cancelled</span>
+                <strong class="metric-value">{{ $cancelledAppointments }}</strong>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Missed</span>
+                <strong class="metric-value">{{ $missedAppointments }}</strong>
             </div>
         </div>
 

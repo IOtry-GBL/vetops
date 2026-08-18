@@ -65,11 +65,15 @@
                     </p>
                 </div>
 
-                <div class="field">
+                <div class="field" style="grid-column: 1 / -1;">
                     <label class="field-label">Date And Time</label>
-                    @include('appointments.partials.calendar-picker', [
-                        'pickerId' => 'vet_create_appointment_picker',
-                        'bookedAppointments' => $bookedAppointments ?? [],
+                    @include('components.appointment-calendar', [
+                        'calendarId' => 'vet-create-calendar',
+                        'viewer' => 'vet',
+                        'mode' => 'booking',
+                        'sideByUside' => true,
+                        'bookings' => $calendarBookings,
+                        'slots' => $calendarSlots,
                     ])
                     @error('appointment_date')
                         <p class="field-error">{{ $message }}</p>
@@ -80,20 +84,7 @@
                 </div>
             </div>
 
-            <div class="form-grid">
-                <div class="field">
-                    <label class="field-label" for="status">Status</label>
-                    <select id="status" name="status" class="field-control" required>
-                        <option value="pending" @selected(old('status') === 'pending')>Pending</option>
-                        <option value="approved" @selected(old('status') === 'approved')>Approved</option>
-                        <option value="completed" @selected(old('status') === 'completed')>Completed</option>
-                        <option value="cancelled" @selected(old('status') === 'cancelled')>Cancelled</option>
-                    </select>
-                    @error('status')
-                        <p class="field-error">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
+            <input type="hidden" name="status" value="pending">
 
             <div class="field">
                 <label class="field-label" for="reason">Reason For Visit</label>

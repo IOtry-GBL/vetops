@@ -109,3 +109,39 @@ test('pet owner cannot confirm medication before the scheduled dose window opens
 
     Carbon::setTestNow();
 });
+
+test('pet owner receives a success payload with the updated notification after confirmation', function () {
+    Carbon::setTestNow(Carbon::create(2026, 4, 19, 4, 30, 0, 'UTC'));
+
+    $fixture = makeAdherenceNotificationFixture([
+        'scheduled_datetime' => Carbon::create(2026, 4, 19, 4, 0, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 19, 7, 0, 0, 'UTC'),
+    ]);
+
+    $response = $this->actingAs($fixture['owner'])
+        ->postJson(route('adherence.confirm', $fixture['notification']->notification_id), [
+            'notes' => 'Taken with breakfast',
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJson([
+            'message' => 'Adherence confirmed successfully',
+        ])
+        ->assertJsonPath('notification.status', 'Confirmed')
+        ->assertJsonPath('notification.notes', 'Taken with breakfast')
+        ->assertJsonPath('notification.adherence_id', $fixture['adherenceLog']->adherence_id)
+        ->assertJsonPath('notification.user_id', $fixture['owner']->user_id);
+
+    $this->assertDatabaseHas('adherence_notifications', [
+        'notification_id' => $fixture['notification']->notification_id,
+        'status' => 'Confirmed',
+        'notes' => 'Taken with breakfast',
+    ]);
+
+    $this->assertDatabaseHas('adherence_logs', [
+        'adherence_id' => $fixture['adherenceLog']->adherence_id,
+        'intake_status' => 'Taken',
+    ]);
+
+    Carbon::setTestNow();
+});

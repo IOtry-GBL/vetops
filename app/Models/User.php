@@ -53,6 +53,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => 'string',
             'status' => 'string',
+            'is_super_admin' => 'boolean',
+            'impersonating_role' => 'string',
         ];
     }
 
@@ -197,6 +199,20 @@ class User extends Authenticatable
     public function isSuperAdmin()
     {
         return $this->is_super_admin === true || $this->is_super_admin === 1;
+    }
+
+    /**
+     * Determine whether the user can access a named permission.
+     */
+    public function canAccessPermission(string $permission): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $rolePermissions = config('super-admin.roles.' . $this->role . '.permissions', []);
+
+        return in_array('all', $rolePermissions, true) || in_array($permission, $rolePermissions, true);
     }
 
     /**

@@ -6,9 +6,7 @@
 
 @section('content')
     @if (session('success'))
-        <div class="alert alert-info">
-            {{ session('success') }}
-        </div>
+        <div class="alert alert-info">{{ session('success') }}</div>
     @endif
 
     @if (session('error'))
@@ -59,55 +57,103 @@
             <p style="color: #6b7280; margin-top: 0.5rem;">Elevated access</p>
         </div>
         <div class="widget">
-            <div class="widget-title">Appointments</div>
-            <div class="widget-value">{{ $stats['total_appointments'] }}</div>
-            <p style="color: #6b7280; margin-top: 0.5rem;">Recorded in system</p>
+            <div class="widget-title">Activities</div>
+            <div class="widget-value">{{ $stats['recent_activities'] }}</div>
+            <p style="color: #6b7280; margin-top: 0.5rem;">System events logged</p>
+        </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <div class="card">
+            <h2 style="margin-top: 0;">Quick Actions</h2>
+            <div style="display: grid; gap: 0.75rem;">
+                <a class="btn btn-primary" href="{{ route('super-admin.users') }}">Manage Accounts</a>
+                <a class="btn btn-secondary" href="{{ route('super-admin.access-control') }}">Roles & Access</a>
+                <a class="btn btn-secondary" href="{{ route('super-admin.monitoring') }}">Monitoring</a>
+                <a class="btn btn-secondary" href="{{ route('super-admin.reports') }}">Reports</a>
+                <a class="btn btn-secondary" href="{{ route('super-admin.settings') }}">System Settings</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-top: 0;">Role Switching</h2>
+            <p style="margin: 0.5rem 0 1rem 0; color: #6b7280;">
+                Open the app from another role's point of view without leaving your super admin account.
+            </p>
+
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
+                <form action="{{ route('super-admin.switch-role') }}" method="POST" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end;">
+                    @csrf
+                    <div>
+                        <label for="role" style="display: block; margin-bottom: 0.4rem; font-weight: 600;">Switch To</label>
+                        <select id="role" name="role" class="form-control" style="min-width: 220px;" required>
+                            <option value="owner">Pet Owner</option>
+                            <option value="vet">Veterinarian</option>
+                            <option value="staff">Staff</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Open Role View</button>
+                </form>
+
+                <form action="{{ route('super-admin.reset') }}" method="POST">
+                    @csrf
+                    <button type="submit" class="btn btn-secondary">Reset To Super Admin</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+        <div class="card">
+            <h2 style="margin-top: 0;">Upcoming Appointments</h2>
+            <div style="display: grid; gap: 0.75rem;">
+                @forelse ($upcomingAppointments as $appointment)
+                    <div style="padding: 0.85rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
+                        <strong>{{ $appointment->pet?->pet_name ?? 'Unknown pet' }}</strong>
+                        <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                            {{ $appointment->appointment_date?->format('M j, Y g:i A') ?? 'N/A' }} | {{ $appointment->status }}
+                        </p>
+                    </div>
+                @empty
+                    <p style="color: #6b7280; margin: 0;">No upcoming appointments found.</p>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-top: 0;">Recent Consultations</h2>
+            <div style="display: grid; gap: 0.75rem;">
+                @forelse ($recentConsultations as $consultation)
+                    <div style="padding: 0.85rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
+                        <strong>{{ $consultation->appointment?->pet?->pet_name ?? 'Unknown pet' }}</strong>
+                        <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                            {{ $consultation->consultation_date?->format('M j, Y g:i A') ?? 'N/A' }} | {{ $consultation->status }}
+                        </p>
+                    </div>
+                @empty
+                    <p style="color: #6b7280; margin: 0;">No recent consultations found.</p>
+                @endforelse
+            </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Role Switching</h2>
-        <p style="margin: 0.5rem 0 1rem 0; color: #6b7280;">
-            Open the app from another role's point of view without leaving your super admin account.
-        </p>
-
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
-            <form action="{{ route('super-admin.switch-role') }}" method="POST" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end;">
-                @csrf
-                <div>
-                    <label for="role" style="display: block; margin-bottom: 0.4rem; font-weight: 600;">Switch To</label>
-                    <select id="role" name="role" class="form-control" style="min-width: 220px;" required>
-                        <option value="owner">Pet Owner</option>
-                        <option value="vet">Veterinarian</option>
-                        <option value="staff">Staff</option>
-                        <option value="admin">Admin</option>
-                    </select>
+        <h2 style="margin-top: 0;">Recent System Activity</h2>
+        <div style="display: grid; gap: 0.75rem;">
+            @forelse ($recentActivities as $activity)
+                <div style="padding: 0.9rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #fff;">
+                    <strong>{{ $activity->action }}</strong>
+                    <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                        {{ $activity->description ?: 'No description provided.' }}
+                        @if ($activity->actor)
+                            <span>by {{ $activity->actor->full_name }}</span>
+                        @endif
+                    </p>
                 </div>
-                <button type="submit" class="btn btn-primary">Open Role View</button>
-            </form>
-
-            <form action="{{ route('super-admin.reset') }}" method="POST">
-                @csrf
-                <button type="submit" class="btn btn-secondary">Reset To Super Admin</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2 style="margin-top: 0;">Platform Totals</h2>
-        <div style="display: grid; gap: 0.85rem;">
-            <div style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
-                <span>Total Pets</span>
-                <strong>{{ $stats['total_pets'] }}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
-                <span>Appointments Logged</span>
-                <strong>{{ $stats['total_appointments'] }}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
-                <span>Users With Elevated Access</span>
-                <strong>{{ $stats['admins'] }}</strong>
-            </div>
+            @empty
+                <p style="color: #6b7280; margin: 0;">No activity records have been captured yet.</p>
+            @endforelse
         </div>
     </div>
 @endsection

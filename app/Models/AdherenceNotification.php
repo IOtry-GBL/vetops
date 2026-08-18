@@ -73,20 +73,23 @@ class AdherenceNotification extends Model
     }
 
     // Confirm the adherence
-    public function confirm(): bool
+    public function confirm(?string $notes = null): bool
     {
         if (!$this->isAvailableForConfirmation()) {
             return false;
         }
 
+        $confirmedAt = now();
+
         $this->update([
             'status' => 'Confirmed',
-            'confirmed_at' => now(),
+            'confirmed_at' => $confirmedAt,
+            'notes' => $notes ?? $this->notes,
         ]);
 
         $this->adherenceLog()->update([
             'intake_status' => 'Taken',
-            'confirmation_time' => now(),
+            'confirmation_time' => $confirmedAt,
         ]);
 
         return true;

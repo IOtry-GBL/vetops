@@ -11,18 +11,18 @@ use App\Http\Controllers\AdherenceController;
 
 // Public Routes
 Route::get('/', function () {
-    return view('auth.login');
+    return view('/auth/login');
 })->name('home');
 
 Route::get('/login', function () {
-    return view('auth.login');
+    return view('login');
 })->name('login')->middleware('guest');
 
 Route::post('/login', [\App\Http\Controllers\Auth\LoginController::class, 'store'])
     ->middleware('guest');
 
 Route::get('/register', function () {
-    return view('auth.register');
+    return view('register');
 })->name('register')->middleware('guest');
 
 Route::post('/register', [\App\Http\Controllers\Auth\RegisterController::class, 'store'])
@@ -33,7 +33,7 @@ Route::post('/logout', function () {
     request()->session()->invalidate();
     request()->session()->regenerateToken();
     return redirect('/');
-})->middleware('auth')->name('logout');
+})->middleware('')->name('logout');
 
 // Authenticated Routes with Role-Based Access
 Route::middleware('auth')->group(function () {
@@ -57,8 +57,16 @@ Route::middleware('auth')->group(function () {
         Route::get('/appointments/available-times', [PetOwnerController::class, 'getAvailableTimes'])->name('appointments.available-times');
         Route::delete('/appointments/{id}/cancel', [PetOwnerController::class, 'cancelAppointment'])->name('appointments.cancel');
         Route::put('/appointments/{id}/reschedule', [PetOwnerController::class, 'rescheduleAppointment'])->name('appointments.reschedule');
+        Route::get('/medical-records', [PetOwnerController::class, 'medicalRecords'])->name('medical-records');
+        Route::get('/medical-records/{record}', [PetOwnerController::class, 'medicalRecordDetails'])->name('medical-records.details');
         Route::get('/prescriptions', [PetOwnerController::class, 'prescriptions'])->name('prescriptions');
         Route::get('/notifications', [PetOwnerController::class, 'notifications'])->name('notifications');
+        Route::post('/notifications/{id}/mark-read', [PetOwnerController::class, 'markNotificationAsRead'])->name('notifications.mark-read');
+        Route::post('/notifications/preferences', [PetOwnerController::class, 'saveNotificationPreferences'])->name('notifications.preferences');
+        Route::delete('/notifications', [PetOwnerController::class, 'deleteNotification'])->name('notifications.delete');
+        Route::delete('/notifications/clear-all', [PetOwnerController::class, 'clearAllNotifications'])->name('notifications.clear-all');
+        Route::get('/adherence/{id}', [PetOwnerController::class, 'viewAdherence'])->name('adherence.view');
+        Route::delete('/adherence/{id}/delete', [PetOwnerController::class, 'deleteAdherence'])->name('adherence.delete');
     });
 
     // Veterinarian Routes
@@ -71,9 +79,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/appointments/{appointment}/session', [VeterinarianController::class, 'storeAppointmentSession'])->name('appointments.session.store');
         Route::post('/appointments/{appointment}/dna', [VeterinarianController::class, 'markAppointmentDidNotArrive'])->name('appointments.dna');
         Route::get('/medical-records', [VeterinarianController::class, 'medicalRecords'])->name('medical-records');
+        Route::get('/medical-records/{record}', [VeterinarianController::class, 'medicalRecordDetails'])->name('medical-records.details');
         Route::get('/prescriptions', [VeterinarianController::class, 'prescriptions'])->name('prescriptions');
         Route::post('/prescriptions', [VeterinarianController::class, 'storePrescription'])->name('prescriptions.store');
-        Route::put('/prescriptions/{prescription}', [VeterinarianController::class, 'updatePrescription'])->name('prescriptions.update');
         Route::get('/adherence-monitoring', [VeterinarianController::class, 'adherenceMonitoring'])->name('adherence-monitoring');
         Route::post('/adherence/{prescription}/update', [VeterinarianController::class, 'updateAdherence'])->name('adherence.update');
     });
@@ -85,6 +93,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/queue', [StaffController::class, 'queue'])->name('queue');
         Route::get('/notifications', [StaffController::class, 'notifications'])->name('notifications');
         Route::get('/notifications/feed', [StaffController::class, 'notificationsFeed'])->name('notifications.feed');
+        Route::delete('/notifications/clear-all', [StaffController::class, 'clearAllNotifications'])->name('notifications.clear-all');
+        Route::delete('/notifications/{type}/{id}', [StaffController::class, 'deleteNotification'])->name('notifications.delete');
 
         // Appointment Management (Section 2.1)
         Route::get('/appointments/create', [StaffController::class, 'createAppointment'])->name('appointments.create');
@@ -102,7 +112,20 @@ Route::middleware('auth')->group(function () {
         Route::get('/patients/{pet}/edit', [StaffController::class, 'editPatient'])->name('patients.edit');
         Route::put('/patients/{pet}', [StaffController::class, 'updatePatient'])->name('patients.update');
 
-        
+        // Client Management
+        Route::get('/clients', [StaffController::class, 'clients'])->name('clients');
+        Route::get('/clients/register', [StaffController::class, 'registerClient'])->name('register-client');
+        Route::post('/clients', [StaffController::class, 'storeClient'])->name('store-client');
+
+        // Pet Management
+        Route::get('/pets', [StaffController::class, 'pets'])->name('pets');
+        Route::get('/pets/add', [StaffController::class, 'createPet'])->name('add-pet');
+        Route::post('/pets', [StaffController::class, 'storePet'])->name('store-pet');
+        Route::get('/pets/{id}/edit', [StaffController::class, 'editPet'])->name('pets.edit');
+        Route::put('/pets/{id}', [StaffController::class, 'updatePet'])->name('pets.update');
+        Route::get('/pets/{id}/confirm-delete', [StaffController::class, 'confirmDeletePet'])->name('pets.confirm-delete');
+        Route::delete('/pets/{id}', [StaffController::class, 'deletePet'])->name('pets.delete');
+
         // E-prescriptions and Medical Records (Section 2.3)
         Route::get('/prescriptions', [StaffController::class, 'prescriptions'])->name('prescriptions');
         Route::get('/prescriptions/{record}', [StaffController::class, 'prescriptionDetails'])->name('prescriptions.details');
@@ -123,6 +146,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/users', [AdminController::class, 'storeUser'])->name('users.store');
         Route::put('/users/{id}', [AdminController::class, 'updateUser'])->name('users.update');
         Route::delete('/users/{id}', [AdminController::class, 'deleteUser'])->name('users.delete');
+        Route::get('/pets', [AdminController::class, 'pets'])->name('pets');
         Route::get('/analytics', [AdminController::class, 'analytics'])->name('analytics');
     });
 
@@ -132,6 +156,16 @@ Route::middleware('auth')->group(function () {
         Route::post('/switch-role', [SuperAdminController::class, 'switchRole'])->name('switch-role');
         Route::post('/reset', [SuperAdminController::class, 'resetToSuperAdmin'])->name('reset');
         Route::get('/users', [SuperAdminController::class, 'users'])->name('users');
+        Route::post('/users', [SuperAdminController::class, 'storeUser'])->name('users.store');
+        Route::put('/users/{user}', [SuperAdminController::class, 'updateUser'])->name('users.update');
+        Route::delete('/users/{user}', [SuperAdminController::class, 'deleteUser'])->name('users.delete');
+        Route::get('/access-control', [SuperAdminController::class, 'accessControl'])->name('access-control');
+        Route::put('/access-control/{user}', [SuperAdminController::class, 'updateAccess'])->name('access-control.update');
+        Route::get('/monitoring', [SuperAdminController::class, 'monitoring'])->name('monitoring');
+        Route::get('/reports', [SuperAdminController::class, 'reports'])->name('reports');
+        Route::get('/reports/export', [SuperAdminController::class, 'exportReports'])->name('reports.export');
+        Route::get('/settings', [SuperAdminController::class, 'settings'])->name('settings');
+        Route::put('/settings', [SuperAdminController::class, 'updateSettings'])->name('settings.update');
         Route::get('/analytics', [SuperAdminController::class, 'analytics'])->name('analytics');
     });
 

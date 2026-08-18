@@ -66,6 +66,11 @@ test('assigned veterinarian can open the appointment session workspace', functio
         ->assertViewHas('appointment', function (Appointment $appointment) use ($fixture) {
             return $appointment->appointment_id === $fixture['appointment']->appointment_id;
         });
+
+    $this->assertDatabaseHas('consultations', [
+        'consultation_id' => $fixture['consultation']->consultation_id,
+        'status' => 'In Progress',
+    ]);
 });
 
 test('assigned veterinarian can complete an appointment session and save the record', function () {
@@ -189,6 +194,11 @@ test('did not arrive marks the appointment as missed for the pet owner', functio
 
     $this->assertDatabaseHas('appointments', [
         'appointment_id' => $fixture['appointment']->appointment_id,
+        'status' => 'Missed',
+    ]);
+
+    $this->assertDatabaseHas('consultations', [
+        'consultation_id' => $fixture['consultation']->consultation_id,
         'status' => 'Missed',
     ]);
 

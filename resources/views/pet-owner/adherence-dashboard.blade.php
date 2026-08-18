@@ -1,152 +1,103 @@
 @extends('layouts.app')
 
-@section('title', 'Medication Adherence - Dashboard')
-
 @section('sidebar')
-    <a href="{{ route('pet-owner.dashboard') }}" class="sidebar-item">Dashboard</a>
-    <a href="{{ route('pet-owner.pets') }}" class="sidebar-item">My Pets</a>
-    <a href="{{ route('pet-owner.appointments') }}" class="sidebar-item">Appointments</a>
-    <a href="{{ route('pet-owner.teleconsultation') }}" class="sidebar-item">Teleconsultation</a>
-    <a href="{{ route('pet-owner.prescriptions') }}" class="sidebar-item">Prescriptions</a>
-    <a href="{{ route('adherence.dashboard') }}" class="sidebar-item active">Medication Adherence</a>
-    <a href="{{ route('pet-owner.notifications') }}" class="sidebar-item">Notifications</a>
-    <a href="#" class="sidebar-item" onclick="openPetCareAI(event)">Ask Pet Care AI</a>
+    @if (auth()->user()->role === 'Pet Owner')
+        <a href="{{ route('pet-owner.dashboard') }}" class="sidebar-item">Dashboard</a>
+        <a href="{{ route('pet-owner.pets') }}" class="sidebar-item">My Pets</a>
+        <a href="{{ route('pet-owner.appointments') }}" class="sidebar-item">Appointments</a>
+        <a href="{{ route('pet-owner.medical-records') }}" class="sidebar-item">Medical Records</a>
+        <a href="{{ route('pet-owner.prescriptions') }}" class="sidebar-item">Prescriptions</a>
+        <a href="{{ route('adherence.dashboard') }}" class="sidebar-item active">Medication Reminders</a>
+        <a href="{{ route('pet-owner.notifications') }}" class="sidebar-item">Notifications</a>
+        <a href="#" class="sidebar-item" onclick="openPetCareAI(event)">Ask Pet Care AI</a>
+    @else
+        <a href="{{ route('staff.dashboard') }}" class="sidebar-item">Dashboard</a>
+        <a href="{{ route('staff.queue') }}" class="sidebar-item">Appointment Queue</a>
+        <a href="{{ route('staff.notifications') }}" class="sidebar-item">Notifications</a>
+        <a href="{{ route('adherence.dashboard') }}" class="sidebar-item active">Medication Reminders</a>
+    @endif
 @endsection
 
 @section('content')
-    <section class="hero-card">
-        <div class="hero-row">
-            <div>
-                <span class="eyebrow">Medication Management</span>
-                <h1 class="hero-title">Adherence Dashboard</h1>
-                <p class="hero-copy">
-                    Track your pet's medication intake and manage reminders in one place. Confirm each dose within the 3-hour window after its scheduled Philippine-time reminder.
-                </p>
-            </div>
-            <div class="action-row">
-                <a href="{{ route('pet-owner.prescriptions') }}" class="btn btn-secondary">← Back to Prescriptions</a>
-            </div>
+    <div class="card">
+        <h1 style="margin: 0;">Medication Reminders</h1>
+        <p style="margin: 0.5rem 0 0 0; color: #6b7280;">
+            Confirm doses, review reminder timing, and keep up with your pet's treatment plan.
+        </p>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+        <div class="widget">
+            <div class="widget-title">Active Reminders</div>
+            <div class="widget-value">{{ $pendingNotifications }}</div>
         </div>
-    </section>
+        <div class="widget">
+            <div class="widget-title">Recent Missed</div>
+            <div class="widget-value">{{ $recentMissed }}</div>
+        </div>
+        <div class="widget">
+            <div class="widget-title">Confirmation Rate</div>
+            <div class="widget-value">{{ $confirmationRate }}%</div>
+        </div>
+    </div>
 
-    <section class="workspace-grid" style="gap: 1.5rem;">
-        <!-- Stats Overview -->
-        <div class="grid grid-cols-3 gap-4 mb-4">
-            <div class="card bg-blue-50 border border-blue-200">
-                <div class="text-center p-6">
-                    <div class="text-3xl font-bold text-blue-600 mb-2">{{ $pendingNotifications }}</div>
-                    <div class="text-sm text-blue-900 font-medium">Pending Confirmations</div>
-                    <p class="text-xs text-blue-700 mt-1">Require attention today</p>
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+        <div class="card">
+            <h2 style="margin-top: 0;">Ready To Confirm</h2>
+            @if ($pendingNotificationsList->isNotEmpty())
+                <div style="max-height: 320px; overflow-y: auto; display: grid; gap: 0.75rem; padding-right: 0.25rem;">
+                    @foreach ($pendingNotificationsList as $notification)
+                        @php
+                            $log = $notification->adherenceLog;
+                            $petName = $log?->prescription?->medicalRecord?->pet?->name ?? $notification->medication_name;
+                            $scheduledAt = $notification->scheduledAtInClinicTimezone();
+                            $deadlineAt = $notification->confirmationDeadlineInClinicTimezone();
+                        @endphp
+                        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #fff;">
+                            <strong>{{ $notification->medication_name }}</strong>
+                            <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                                {{ $petName }} | {{ $scheduledAt?->format('M j, Y g:i A') ?? 'N/A' }} PH
+                            </p>
+                            <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                                Confirm by {{ $deadlineAt?->format('g:i A') ?? 'N/A' }} PH
+                            </p>
+                            @if (auth()->user()->role === 'Pet Owner' && $log && $log->isAvailableForConfirmation())
+                                <form action="{{ route('adherence.confirm', $notification->notification_id) }}" method="POST" style="margin-top: 0.75rem;">
+                                    @csrf
+                                    <button type="submit" class="btn btn-primary">Confirm Intake</button>
+                                </form>
+                            @else
+                                <span style="display: inline-block; margin-top: 0.75rem; padding: 0.3rem 0.65rem; border-radius: 999px; background: #dbeafe; color: #1d4ed8;">
+                                    {{ auth()->user()->role === 'Pet Owner' ? 'Waiting for confirmation window' : 'Owner confirmation only' }}
+                                </span>
+                            @endif
+                        </div>
+                    @endforeach
                 </div>
-            </div>
-            <div class="card bg-red-50 border border-red-200">
-                <div class="text-center p-6">
-                    <div class="text-3xl font-bold text-red-600 mb-2">{{ $recentMissed }}</div>
-                    <div class="text-sm text-red-900 font-medium">Missed Last 30 Days</div>
-                    <p class="text-xs text-red-700 mt-1">Track and improve</p>
-                </div>
-            </div>
-            <div class="card bg-green-50 border border-green-200">
-                <div class="text-center p-6">
-                    <div class="text-3xl font-bold text-green-600 mb-2">{{ $confirmationRate }}%</div>
-                    <div class="text-sm text-green-900 font-medium">Confirmation Rate</div>
-                    <p class="text-xs text-green-700 mt-1">Last 30 days average</p>
-                </div>
-            </div>
+            @else
+                <p style="color: #6b7280; margin: 0;">No active reminders right now.</p>
+            @endif
         </div>
 
-        <!-- Main Content Area -->
-        <div class="grid grid-cols-12 gap-4">
-            <!-- Notification Inbox (spans 8 columns) -->
-            <div class="col-span-8">
-                @livewire('adherence-notification-inbox')
-            </div>
-
-            <!-- Sidebar Info (spans 4 columns) -->
-            <aside class="col-span-4 space-y-4">
-                <!-- Tips Card -->
-                <div class="card stack bg-amber-50 border border-amber-200">
-                    <div class="surface-header">
-                        <span class="eyebrow">Tips for Success</span>
-                        <h3>Improve Your Adherence</h3>
-                    </div>
-                    <ul class="space-y-2 text-sm">
-                        <li class="flex gap-2">
-                            <span class="text-lg">Alarm Clock</span>
-                            <span><strong>Set a routine:</strong> Take medications at the same time daily</span>
-                        </li>
-                        <li class="flex gap-2">
-                            <span class="text-lg">Phone</span>
-                            <span><strong>Use reminders:</strong> Enable notifications on your phone</span>
-                        </li>
-                        <li class="flex gap-2">
-                            <span class="text-lg">Note</span>
-                            <span><strong>Keep notes:</strong> Document any issues or side effects</span>
-                        </li>
-                        <li class="flex gap-2">
-                            <span class="text-lg">Phone</span>
-                            <span><strong>Contact support:</strong> Reach out if you have questions</span>
-                        </li>
-                    </ul>
+        <div class="card">
+            <h2 style="margin-top: 0;">Upcoming Reminders</h2>
+            @if ($upcomingNotificationsList->isNotEmpty())
+                <div style="max-height: 320px; overflow-y: auto; display: grid; gap: 0.75rem; padding-right: 0.25rem;">
+                    @foreach ($upcomingNotificationsList as $notification)
+                        @php
+                            $scheduledAt = $notification->scheduledAtInClinicTimezone();
+                        @endphp
+                        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.85rem; background: #f8fafc;">
+                            <strong>{{ $notification->medication_name }}</strong>
+                            <p style="margin: 0.35rem 0 0 0; color: #6b7280;">
+                                {{ $notification->dosage }} | {{ $scheduledAt?->format('M j, Y g:i A') ?? 'N/A' }} PH
+                            </p>
+                        </div>
+                    @endforeach
                 </div>
-
-                <!-- Adherence Info Card -->
-                <div class="card stack bg-blue-50 border border-blue-200">
-                    <div class="surface-header">
-                        <span class="eyebrow">Information - How It Works</span>
-                        <h3>Confirmation Window</h3>
-                    </div>
-                    <div class="space-y-3 text-sm">
-                        <p>
-                            <strong class="text-blue-900">3 Hour Window:</strong>
-                            You have 3 hours from the scheduled medication time to confirm your pet took the dose.
-                        </p>
-                        <p>
-                            <strong class="text-blue-900">Auto-Missed:</strong>
-                            If you don't confirm within the window, it's automatically marked as missed.
-                        </p>
-                        <p>
-                            <strong class="text-blue-900">Philippine Time:</strong>
-                            Daily schedules start from 6:00 AM and follow the prescribed dose count using Asia/Manila time.
-                        </p>
-                        <p>
-                            <strong class="text-blue-900">Delete Option:</strong>
-                            You can delete notification records from your inbox anytime.
-                        </p>
-                    </div>
-                </div>
-            </aside>
+            @else
+                <p style="color: #6b7280; margin: 0;">No upcoming reminders scheduled.</p>
+            @endif
         </div>
-    </section>
-
-    <!-- Adherence Reminder Popup -->
-    @livewire('adherence-reminder')
-
-    <style>
-        .grid {
-            display: grid;
-        }
-
-        .grid-cols-3 {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-
-        .grid-cols-12 {
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-        }
-
-        .col-span-8 {
-            grid-column: span 8 / span 8;
-        }
-
-        .col-span-4 {
-            grid-column: span 4 / span 4;
-        }
-
-        @media (max-width: 1024px) {
-            .col-span-8, .col-span-4 {
-                grid-column: span 12 / span 12;
-            }
-        }
-    </style>
+    </div>
 @endsection

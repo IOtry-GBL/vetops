@@ -3,6 +3,7 @@
 @section('sidebar')
     <a href="{{ route('admin.dashboard') }}" class="sidebar-item active">Dashboard</a>
     <a href="{{ route('admin.users') }}" class="sidebar-item">User Management</a>
+    <a href="{{ route('admin.pets') }}" class="sidebar-item">Pet Management</a>
     <a href="{{ route('admin.analytics') }}" class="sidebar-item">Analytics</a>
 @endsection
 

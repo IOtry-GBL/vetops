@@ -66,9 +66,12 @@
 
             <div style="margin-bottom: 1.5rem;">
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Appointment Date & Time *</label>
-                @include('appointments.partials.calendar-picker', [
-                    'pickerId' => 'staff_create_appointment_picker',
-                    'bookedAppointments' => $bookedAppointments ?? [],
+                @include('components.appointment-calendar', [
+                    'calendarId' => 'staff-create-calendar',
+                    'viewer' => 'staff',
+                    'mode' => 'booking',
+                    'bookings' => $calendarBookings,
+                    'slots' => $calendarSlots,
                 ])
                 @error('appointment_date')
                     <p style="color: var(--color-emergency); font-size: 0.875rem; margin-top: 0.25rem;">{{ $message }}</p>

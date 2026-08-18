@@ -77,6 +77,10 @@
                 <span class="metric-label">Cancelled</span>
                 <strong class="metric-value">{{ $stats['cancelled'] }}</strong>
             </div>
+            <div class="metric-card">
+                <span class="metric-label">Missed</span>
+                <strong class="metric-value">{{ $stats['missed'] }}</strong>
+            </div>
         </div>
     </section>
 

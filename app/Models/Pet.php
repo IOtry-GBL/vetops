@@ -14,6 +14,7 @@ class Pet extends Model
 
     protected $primaryKey = 'pet_id';
     protected $fillable = ['user_id', 'pet_name', 'species', 'breed', 'date_of_birth', 'weight', 'sex'];
+    protected $casts = ['date_of_birth' => 'date'];
 
     public function getIdAttribute(): ?int
     {
@@ -43,11 +44,6 @@ class Pet extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class, 'pet_id');
-    }
-
-    public function symptomLogs(): HasMany
-    {
-        return $this->hasMany(SymptomLog::class, 'pet_id');
     }
 
     public function medicalRecords(): HasMany

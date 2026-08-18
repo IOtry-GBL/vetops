@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
@@ -65,7 +66,19 @@ class Appointment extends Model
 
     public function scopeActiveEntries(Builder $query): Builder
     {
-        return $query->whereIn('status', self::ACTIVE_STATUSES);
+        $now = now('Asia/Manila');
+
+        return $query
+            ->whereIn('status', self::ACTIVE_STATUSES)
+            ->where(function (Builder $query) use ($now) {
+                $query
+                    ->whereDate('appointment_date', '>', $now->toDateString())
+                    ->orWhere(function (Builder $query) use ($now) {
+                        $query
+                            ->whereDate('appointment_date', $now->toDateString())
+                            ->whereTime('appointment_time', '>=', $now->format('H:i:s'));
+                    });
+            });
     }
 
     public static function petHasActiveEntry(int $petId, ?int $ignoreAppointmentId = null): bool

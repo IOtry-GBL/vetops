@@ -11,197 +11,738 @@
 @endsection
 
 @section('content')
-    @php
-        $selectedRecordId = old('record_id', optional($selectedRecord)->record_id);
-    @endphp
 
-    <section class="hero-card">
-        <div class="hero-row">
-            <div>
-                <h1 class="hero-title">E-Prescriptions</h1>
-                <p class="hero-copy">Create and edit prescriptions from clinic medical records.</p>
-            </div>
-            <div class="metric-grid" style="min-width: min(100%, 460px);">
-                <div class="metric-card"><span class="metric-label">Medical Records</span><strong class="metric-value">{{ $medicalRecords->count() }}</strong></div>
-                <div class="metric-card"><span class="metric-label">Patients</span><strong class="metric-value">{{ $patientCount }}</strong></div>
-                <div class="metric-card"><span class="metric-label">Issued Today</span><strong class="metric-value">{{ $issuedTodayCount }}</strong></div>
-                <div class="metric-card"><span class="metric-label">Total Prescriptions</span><strong class="metric-value">{{ $totalPrescriptionRows }}</strong></div>
-            </div>
-        </div>
-    </section>
+@php
+    $selectedRecordId = old('record_id', optional($selectedRecord)->record_id);
 
-    @if (session('success'))
-        <div class="alert alert-info">{{ session('success') }}</div>
-    @endif
+    $breeds = $medicalRecords
+        ->pluck('pet.breed')
+        ->filter()
+        ->unique()
+        ->sort()
+        ->values();
+@endphp
 
+@if(session('success'))
+    <div class="alert alert-info">
+        {{ session('success') }}
+    </div>
+@endif
+
+<div class="prescription-layout">
+
+    {{-- LEFT SIDE --}}
     <section class="card">
-        <form method="GET" action="{{ route('vet.prescriptions') }}" class="form-grid">
-            <div class="field">
-                <label class="field-label" for="search">Search prescriptions</label>
-                <input id="search" name="search" value="{{ $search }}" class="field-control" placeholder="Medication, pet, owner, dosage">
-            </div>
-            <div class="field" style="align-self: end;">
-                <button type="submit" class="btn btn-primary">Filter</button>
-                @if($search !== '')
-                    <a href="{{ route('vet.prescriptions') }}" class="btn btn-secondary">Clear</a>
-                @endif
-            </div>
-        </form>
-    </section>
 
-    <section class="card">
         <div class="surface-header">
             <div>
                 <h2>Medical Records</h2>
-                <p class="section-copy">First 10 matching records. Choose one to create a prescription.</p>
-            </div>
-            @if(!$seeAll && $medicalRecords->count() > 10)
-                <a href="{{ route('vet.prescriptions', ['search' => $search, 'record' => $selectedRecord?->record_id, 'see_all' => 1]) }}" class="btn btn-secondary">See All</a>
-            @endif
-        </div>
-        <div class="table-wrap">
-            <table class="app-table">
-                <thead>
-                    <tr><th>Record</th><th>Pet</th><th>Owner</th><th>Diagnosis</th><th>Rx Count</th><th>Action</th></tr>
-                </thead>
-                <tbody>
-                    @forelse($medicalRecords->take($seeAll ? $medicalRecords->count() : 10) as $record)
-                        <tr>
-                            <td>Record {{ $record->record_id }}</td>
-                            <td>{{ $record->pet?->name ?? 'Unknown Pet' }}</td>
-                            <td>{{ $record->pet?->owner?->name ?? 'Unknown Owner' }}</td>
-                            <td>{{ \Illuminate\Support\Str::limit($record->diagnosis ?: 'No diagnosis recorded', 90) }}</td>
-                            <td>{{ $record->prescriptions->count() }}</td>
-                            <td><a href="{{ route('vet.prescriptions', ['record' => $record->record_id, 'search' => $search]) }}" class="btn btn-secondary" style="min-height: 36px; padding: 0.45rem 0.75rem;">Select</a></td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="6" style="text-align: center; color: #6b7280;">No medical records found.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </section>
 
-    <section class="card">
-        <div class="surface-header">
-            <div>
-                <h2>Create Prescription</h2>
-                <p class="section-copy">Selected record: {{ $selectedRecord ? 'Record '.$selectedRecord->record_id.' / '.$selectedRecord->pet?->name : 'None' }}</p>
+                <p class="section-copy">
+                    Select a patient to review and update prescriptions.
+                </p>
             </div>
         </div>
 
-        @if ($selectedRecord)
-            <form action="{{ route('vet.prescriptions.store') }}" method="POST" class="stack">
-                @csrf
-                <div class="field">
-                    <label class="field-label" for="record_id">Medical Record</label>
-                    <select id="record_id" name="record_id" class="field-control">
-                        @foreach ($medicalRecords as $record)
-                            <option value="{{ $record->record_id }}" @selected((string) $selectedRecordId === (string) $record->record_id)>
-                                {{ $record->pet?->name ?? 'Unknown Pet' }} - Record {{ $record->record_id }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('record_id')<p class="field-error">{{ $message }}</p>@enderror
-                </div>
+        {{-- SEARCH + FILTER --}}
+        <div class="datatable-toolbar">
 
-                <div class="form-grid">
-                    <div class="field">
-                        <label class="field-label" for="medication_name">Medication Name</label>
-                        <input id="medication_name" name="medication_name" type="text" class="field-control" value="{{ old('medication_name') }}">
-                        @error('medication_name')<p class="field-error">{{ $message }}</p>@enderror
-                    </div>
-                    <div class="field">
-                        <label class="field-label" for="dosage">Dosage</label>
-                        <input id="dosage" name="dosage" type="text" class="field-control" value="{{ old('dosage') }}">
-                        @error('dosage')<p class="field-error">{{ $message }}</p>@enderror
-                    </div>
-                    <div class="field">
-                        <label class="field-label" for="frequency">Frequency</label>
-                        <input id="frequency" name="frequency" type="text" list="prescription-frequency-options" class="field-control" placeholder="1 to 5" value="{{ old('frequency') }}">
-                        @error('frequency')<p class="field-error">{{ $message }}</p>@enderror
-                    </div>
-                    <div class="field">
-                        <label class="field-label" for="duration">Duration</label>
-                        <input id="duration" name="duration" type="text" list="prescription-duration-options" class="field-control" placeholder="7" value="{{ old('duration') }}">
-                        @error('duration')<p class="field-error">{{ $message }}</p>@enderror
-                    </div>
-                </div>
-
-                <datalist id="prescription-frequency-options">
-                    <option value="1" label="Once daily"></option>
-                    <option value="2" label="Twice daily"></option>
-                    <option value="3" label="3 times daily"></option>
-                    <option value="4" label="4 times daily"></option>
-                    <option value="5" label="5 times daily"></option>
-                </datalist>
-                <datalist id="prescription-duration-options">
-                    <option value="1"></option><option value="3"></option><option value="5"></option><option value="7"></option><option value="10"></option><option value="14"></option><option value="30"></option>
-                </datalist>
-
-                <button type="submit" class="btn btn-primary">Create Prescription</button>
-            </form>
-        @else
-            <div class="empty-state">Select a medical record before creating a prescription.</div>
-        @endif
-    </section>
-
-    <section class="card">
-        <div class="surface-header">
-            <div>
-                <h2>Prescription Data</h2>
-                <p class="section-copy">Showing {{ $prescriptions->count() }} of {{ $totalPrescriptionRows }} prescription records. Edit existing prescriptions directly in the table.</p>
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="recordSearch"
+                    class="field-control"
+                    placeholder="Search pet or owner name...">
             </div>
-            @if(!$seeAll && $totalPrescriptionRows > 10)
-                <a href="{{ route('vet.prescriptions', ['search' => $search, 'record' => $selectedRecord?->record_id, 'see_all' => 1]) }}" class="btn btn-secondary">See All</a>
-            @endif
+
+            <div class="filter-box">
+                <select id="breedFilter" class="field-control">
+
+                    <option value="">
+                        All Breeds
+                    </option>
+
+                    @foreach($breeds as $breed)
+
+                        <option value="{{ strtolower($breed) }}">
+                            {{ $breed }}
+                        </option>
+
+                    @endforeach
+
+                </select>
+            </div>
+
         </div>
 
-        <div class="table-wrap">
-            <table class="app-table">
+        {{-- TABLE --}}
+        <div class="datatable-wrapper">
+
+            <table class="records-table">
+
                 <thead>
                     <tr>
-                        <th>Patient</th>
-                        <th>Record</th>
-                        <th>Medication</th>
-                        <th>Dosage</th>
-                        <th>Frequency</th>
-                        <th>Duration</th>
-                        <th>Issued</th>
-                        <th>Save</th>
+                        <th>Pet</th>
+                        <th>Owner</th>
+                        <th>Breed</th>
+                        <th>Current Rx</th>
                     </tr>
                 </thead>
-                <tbody>
-                    @forelse ($prescriptions as $prescription)
+
+                <tbody id="recordsTableBody">
+
+                    @forelse($medicalRecords as $record)
+
                         @php
-                            $record = $prescription->medicalRecord;
-                            $pet = $record?->pet;
+                            $pet = $record->pet;
                             $owner = $pet?->owner;
+
+                            $latestPrescription =
+                                $record->prescriptions
+                                    ->sortByDesc('created_at')
+                                    ->first();
+
+                            $isSelected =
+                                optional($selectedRecord)->record_id === $record->record_id;
                         @endphp
-                        <tr>
+
+                        <tr
+                            onclick="window.location='{{ route('vet.prescriptions', ['record' => $record->record_id]) }}'"
+                            class="clickable-row {{ $isSelected ? 'selected-row' : '' }}"
+                            data-pet="{{ strtolower($pet?->name ?? '') }}"
+                            data-owner="{{ strtolower($owner?->name ?? '') }}"
+                            data-breed="{{ strtolower($pet?->breed ?? '') }}">
+
                             <td>
-                                <strong>{{ $pet?->name ?? 'Unknown Pet' }}</strong><br>
-                                <span class="muted-copy">{{ $owner?->name ?? 'Unknown Owner' }}</span>
+
+                                <div class="pet-cell">
+
+                                    <strong>
+                                        {{ $pet?->name ?? 'Unknown' }}
+                                    </strong>
+
+                                    <span>
+                                        {{ $pet?->species ?? 'N/A' }}
+                                    </span>
+
+                                </div>
+
                             </td>
-                            <td>Record {{ $record?->record_id ?? 'N/A' }}</td>
-                            <td><input form="prescription-update-{{ $prescription->prescription_id }}" name="medication_name" value="{{ old('medication_name', $prescription->medication_name) }}" class="field-control" style="min-width: 160px;"></td>
-                            <td><input form="prescription-update-{{ $prescription->prescription_id }}" name="dosage" value="{{ old('dosage', $prescription->dosage) }}" class="field-control" style="min-width: 110px;"></td>
-                            <td><input form="prescription-update-{{ $prescription->prescription_id }}" name="frequency" value="{{ old('frequency', $prescription->frequency) }}" class="field-control" style="min-width: 130px;"></td>
-                            <td><input form="prescription-update-{{ $prescription->prescription_id }}" name="duration" value="{{ old('duration', $prescription->duration) }}" class="field-control" style="min-width: 110px;"></td>
-                            <td>{{ $prescription->issued_at?->format('M d, Y') ?? 'N/A' }}</td>
+
                             <td>
-                                <form id="prescription-update-{{ $prescription->prescription_id }}" method="POST" action="{{ route('vet.prescriptions.update', $prescription) }}" style="margin: 0;">
-                                    @csrf
-                                    @method('PUT')
-                                    <button type="submit" class="btn btn-primary" style="min-height: 36px; padding: 0.45rem 0.75rem;">Save</button>
-                                </form>
+                                {{ $owner?->name ?? 'Unknown' }}
+                            </td>
+
+                            <td>
+                                {{ $pet?->breed ?? 'N/A' }}
+                            </td>
+
+                            <td>
+
+                                @if($latestPrescription)
+
+                                    <div class="rx-mini">
+
+                                        <strong>
+                                            {{ $latestPrescription->medication_name }}
+                                        </strong>
+
+                                        <span>
+                                            {{ $latestPrescription->dosage }}
+                                        </span>
+
+                                    </div>
+
+                                @else
+
+                                    <span class="pill pill-neutral">
+                                        No Rx
+                                    </span>
+
+                                @endif
+
+                            </td>
+
+                        </tr>
+
+                    @empty
+
+                        <tr>
+                            <td colspan="4">
+
+                                <div class="empty-state">
+                                    No medical records available.
+                                </div>
+
                             </td>
                         </tr>
-                    @empty
-                        <tr><td colspan="8" style="text-align: center; color: #6b7280;">No e-prescriptions found.</td></tr>
+
                     @endforelse
+
                 </tbody>
+
             </table>
+
         </div>
+
     </section>
+
+    {{-- RIGHT SIDE --}}
+    <section class="stack">
+
+        <div class="card">
+
+            <div class="surface-header">
+
+                <div>
+                    <h2>Prescription Details</h2>
+
+                    <p class="section-copy">
+                        Review all prescriptions starting from the current/latest prescription.
+                    </p>
+                </div>
+
+            </div>
+
+            @if($selectedRecord)
+
+                @php
+                    $selectedPet = $selectedRecord->pet;
+                    $selectedOwner = $selectedPet?->owner;
+                @endphp
+
+                {{-- SUMMARY --}}
+                <div class="patient-summary">
+
+                    <div class="summary-block">
+
+                        <label>Patient</label>
+
+                        <strong>
+                            {{ $selectedPet?->name ?? 'Unknown Pet' }}
+                        </strong>
+
+                        <span>
+                            {{ $selectedPet?->species ?? 'Unknown Species' }}
+                            {{ $selectedPet?->breed ? ' - '.$selectedPet->breed : '' }}
+                        </span>
+
+                    </div>
+
+                    <div class="summary-block">
+
+                        <label>Owner</label>
+
+                        <strong>
+                            {{ $selectedOwner?->name ?? 'Unknown Owner' }}
+                        </strong>
+
+                        <span>
+                            Record #{{ $selectedRecord->record_id }}
+                        </span>
+
+                    </div>
+
+                    <div class="summary-block">
+
+                        <label>Diagnosis</label>
+
+                        <strong>
+                            {{ $selectedRecord->diagnosis ?: 'No diagnosis recorded' }}
+                        </strong>
+
+                        <span>
+                            {{ $selectedRecord->created_at?->format('M d, Y') }}
+                        </span>
+
+                    </div>
+
+                </div>
+
+                {{-- PRESCRIPTION HISTORY --}}
+                <div class="current-prescription">
+
+                    <div class="current-header">
+
+                        <h3>Prescription History</h3>
+
+                        <span class="pill pill-success">
+                            {{ $selectedRecord->prescriptions->count() }} Total
+                        </span>
+
+                    </div>
+
+                    @if($selectedRecord->prescriptions->count() > 0)
+
+                        <div class="prescription-history-scroll">
+
+                            @foreach($selectedRecord->prescriptions->sortByDesc('created_at') as $prescription)
+
+                                <div class="history-prescription-card">
+
+                                    <div class="history-top">
+
+                                        <div class="history-medication">
+
+                                            <strong>
+                                                {{ $prescription->medication_name }}
+                                            </strong>
+
+                                            <span>
+                                                {{ $prescription->issued_at?->format('M d, Y') ?? 'Issued' }}
+                                            </span>
+
+                                        </div>
+
+                                        @if($loop->first)
+
+                                            <span class="pill pill-success">
+                                                Current
+                                            </span>
+
+                                        @endif
+
+                                    </div>
+
+                                    <div class="history-grid">
+
+                                        <div class="history-item">
+
+                                            <label>Dosage</label>
+
+                                            <strong>
+                                                {{ $prescription->dosage }}
+                                            </strong>
+
+                                        </div>
+
+                                        <div class="history-item">
+
+                                            <label>Frequency</label>
+
+                                            <strong>
+                                                {{ $prescription->frequency }}
+                                            </strong>
+
+                                        </div>
+
+                                        <div class="history-item">
+
+                                            <label>Duration</label>
+
+                                            <strong>
+                                                {{ $prescription->duration }}
+                                            </strong>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            @endforeach
+
+                        </div>
+
+                    @else
+
+                        <div class="empty-state">
+                            No prescription available for this record.
+                        </div>
+
+                    @endif
+
+                </div>
+
+                {{-- ADD PRESCRIPTION --}}
+                <form
+                    action="{{ route('vet.prescriptions.store') }}"
+                    method="POST"
+                    class="stack"
+                    style="margin-top:1.5rem;">
+
+                    @csrf
+
+                    <input
+                        type="hidden"
+                        name="record_id"
+                        value="{{ $selectedRecord->record_id }}">
+
+                    <div class="form-grid">
+
+                        <div class="field">
+
+                            <label class="field-label">
+                                Medication Name
+                            </label>
+
+                            <input
+                                type="text"
+                                name="medication_name"
+                                class="field-control"
+                                placeholder="Amoxicillin"
+                                value="{{ old('medication_name') }}">
+
+                            @error('medication_name')
+                                <p class="field-error">{{ $message }}</p>
+                            @enderror
+
+                        </div>
+
+                        <div class="field">
+
+                            <label class="field-label">
+                                Dosage
+                            </label>
+
+                            <input
+                                type="text"
+                                name="dosage"
+                                class="field-control"
+                                placeholder="250mg"
+                                value="{{ old('dosage') }}">
+
+                            @error('dosage')
+                                <p class="field-error">{{ $message }}</p>
+                            @enderror
+
+                        </div>
+
+                        <div class="field">
+
+                            <label class="field-label">
+                                Frequency
+                            </label>
+
+                            <input
+                                type="text"
+                                name="frequency"
+                                class="field-control"
+                                placeholder="2x daily"
+                                value="{{ old('frequency') }}">
+
+                            @error('frequency')
+                                <p class="field-error">{{ $message }}</p>
+                            @enderror
+
+                        </div>
+
+                        <div class="field">
+
+                            <label class="field-label">
+                                Duration
+                            </label>
+
+                            <input
+                                type="text"
+                                name="duration"
+                                class="field-control"
+                                placeholder="7 days"
+                                value="{{ old('duration') }}">
+
+                            @error('duration')
+                                <p class="field-error">{{ $message }}</p>
+                            @enderror
+
+                        </div>
+
+                    </div>
+
+                    <div class="action-row">
+
+                        <button type="submit" class="btn btn-primary">
+                            Add Prescription
+                        </button>
+
+                    </div>
+
+                </form>
+
+            @else
+
+                <div class="empty-state">
+                    Select a medical record to review prescriptions.
+                </div>
+
+            @endif
+
+        </div>
+
+    </section>
+
+</div>
+
+@endsection
+
+@section('styles')
+
+<style>
+
+.prescription-layout{
+    display:grid;
+    grid-template-columns:420px 1fr;
+    gap:1.5rem;
+    align-items:start;
+}
+
+.datatable-toolbar{
+    display:flex;
+    gap:.8rem;
+    margin-bottom:1rem;
+}
+
+.search-box{
+    flex:1;
+}
+
+.filter-box{
+    width:160px;
+}
+
+.datatable-wrapper{
+    overflow:auto;
+    max-height:720px;
+    border:1px solid var(--shell-line);
+    border-radius:16px;
+}
+
+.records-table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+}
+
+.records-table thead{
+    position:sticky;
+    top:0;
+    z-index:5;
+    background:#f8fafc;
+}
+
+.records-table th{
+    padding:.85rem;
+    text-align:left;
+    border-bottom:1px solid var(--shell-line);
+    font-size:.82rem;
+    font-weight:700;
+    white-space:nowrap;
+}
+
+.records-table td{
+    padding:.85rem;
+    border-bottom:1px solid rgba(0,0,0,.06);
+    font-size:.9rem;
+    vertical-align:middle;
+}
+
+.clickable-row{
+    cursor:pointer;
+    transition:.18s ease;
+}
+
+.clickable-row:hover{
+    background:rgba(15,139,141,.05);
+}
+
+.selected-row{
+    background:rgba(15,139,141,.10);
+}
+
+.pet-cell{
+    display:flex;
+    flex-direction:column;
+    gap:.15rem;
+}
+
+.pet-cell span{
+    font-size:.75rem;
+    color:#64748b;
+}
+
+.rx-mini{
+    display:flex;
+    flex-direction:column;
+    gap:.15rem;
+}
+
+.rx-mini strong{
+    font-size:.82rem;
+}
+
+.rx-mini span{
+    font-size:.72rem;
+    color:#64748b;
+}
+
+.patient-summary{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1rem;
+    margin-bottom:1.5rem;
+}
+
+.summary-block{
+    padding:1rem;
+    border:1px solid var(--shell-line);
+    border-radius:16px;
+    background:#fff;
+    display:flex;
+    flex-direction:column;
+    gap:.35rem;
+}
+
+.summary-block label{
+    font-size:.72rem;
+    text-transform:uppercase;
+    color:#64748b;
+    letter-spacing:.05em;
+}
+
+.summary-block span{
+    color:#64748b;
+    font-size:.85rem;
+}
+
+.current-prescription{
+    border:1px solid var(--shell-line);
+    border-radius:18px;
+    padding:1.2rem;
+    background:#fff;
+}
+
+.current-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:1rem;
+}
+.prescription-history-scroll{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+
+    /* SHOW ONLY FIRST 2 CARDS */
+    max-height:290px;
+
+    overflow-y:auto;
+    padding-right:.2rem;
+}
+.history-prescription-card{
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:16px;
+    padding:1rem;
+    background:#fafafa;
+}
+
+.history-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:1rem;
+}
+
+.history-medication{
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    gap:.6rem;
+    flex-wrap:wrap;
+}
+
+.history-medication strong{
+    font-size:.95rem;
+    margin:0;
+}
+
+.history-medication span{
+    font-size:.78rem;
+    color:#64748b;
+    margin:0;
+    white-space:nowrap;
+}
+
+.history-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1rem;
+}
+
+.history-item{
+    display:flex;
+    flex-direction:column;
+    gap:.3rem;
+}
+
+.history-item label{
+    font-size:.72rem;
+    text-transform:uppercase;
+    color:#64748b;
+    letter-spacing:.05em;
+}
+
+.history-item strong{
+    font-size:.92rem;
+}
+
+@media(max-width:1200px){
+
+    .prescription-layout{
+        grid-template-columns:1fr;
+    }
+
+    .patient-summary{
+        grid-template-columns:1fr;
+    }
+
+    .history-grid{
+        grid-template-columns:1fr;
+    }
+
+}
+
+</style>
+
+@endsection
+
+@section('scripts')
+
+<script>
+
+const searchInput = document.getElementById('recordSearch');
+const breedFilter = document.getElementById('breedFilter');
+const rows = document.querySelectorAll('#recordsTableBody tr');
+
+function filterTable(){
+
+    const search = searchInput.value.toLowerCase();
+    const breed = breedFilter.value.toLowerCase();
+
+    rows.forEach(row => {
+
+        const pet = row.dataset.pet || '';
+        const owner = row.dataset.owner || '';
+        const rowBreed = row.dataset.breed || '';
+
+        const matchesSearch =
+            pet.includes(search) ||
+            owner.includes(search);
+
+        const matchesBreed =
+            breed === '' ||
+            rowBreed === breed;
+
+        row.style.display =
+            matchesSearch && matchesBreed
+                ? ''
+                : 'none';
+
+    });
+
+}
+
+searchInput.addEventListener('keyup', filterTable);
+breedFilter.addEventListener('change', filterTable);
+
+</script>
+
 @endsection

@@ -112,7 +112,7 @@ test('staff can view the medical records index page', function () {
         ->get(route('staff.medical-records'));
 
     $response->assertOk()
-        ->assertViewIs('staff.medical-records.index')
+        ->assertViewIs('medical-records.staff-index')
         ->assertSee('Milo')
         ->assertSee('Seasonal dermatitis');
 });
@@ -124,7 +124,7 @@ test('staff can view medical record details', function () {
         ->get(route('staff.medical-records.details', $fixture['medicalRecord']->record_id));
 
     $response->assertOk()
-        ->assertViewIs('staff.medical-records.details')
+        ->assertViewIs('medical-records.staff-details')
         ->assertSee('Seasonal dermatitis')
         ->assertSee('Use medicated shampoo twice weekly.')
         ->assertSee('Cetirizine');

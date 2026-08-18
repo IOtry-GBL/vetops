@@ -10,7 +10,7 @@ class LoginController extends Controller
 {
     public function store(Request $request)
     {
-        $credentials = $request->validate([
+        $credentials = $request->validte([
             'email' => 'required|email',
             'password' => 'required',
         ]);
@@ -27,15 +27,15 @@ class LoginController extends Controller
 
             return match($user->role) {
                 'Pet Owner' => redirect('/pet-owner/dashboard'),
-                'Veterinarian' => redirect('/vet/dashboard'),
+                'Veterinarian' => redirect('/veterinarian/dashboard'),
                 'Staff' => redirect('/staff/dashboard'),
                 'Admin' => redirect('/admin/dashboard'),
-                default => redirect('/'),
+                default => redirect('/auth/login'),
             };
         }
-
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
         ])->onlyInput('email');
     }
 }
+

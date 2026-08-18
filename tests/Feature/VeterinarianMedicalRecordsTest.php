@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AdherenceLog;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\EPrescription;
@@ -59,6 +60,17 @@ function makeVeterinarianMedicalRecordFixture(User $vet, array $overrides = []):
         'issued_at' => $overrides['issued_at'] ?? now()->subHours(2),
     ]);
 
+    if (($overrides['with_adherence'] ?? true) === true) {
+        AdherenceLog::create([
+            'prescription_id' => $prescription->prescription_id,
+            'scheduled_datetime' => $overrides['scheduled_datetime'] ?? now()->subHour(),
+            'confirmation_deadline' => $overrides['confirmation_deadline'] ?? now()->addHours(2),
+            'intake_status' => $overrides['intake_status'] ?? 'Taken',
+            'confirmation_time' => $overrides['confirmation_time'] ?? now()->subMinutes(30),
+            'is_notified' => true,
+        ]);
+    }
+
     return compact('owner', 'pet', 'appointment', 'consultation', 'medicalRecord', 'prescription');
 }
 
@@ -86,19 +98,17 @@ test('veterinarian medical records page loads clinic-wide patient records', func
     ]));
 
     $response->assertOk()
-        ->assertViewIs('veterinarian.medical-records')
+        ->assertViewIs('medical-records.veterinarian-index')
+        ->assertSee('Record List')
+        ->assertSee('View')
+        ->assertSee(route('vet.medical-records.details', $fixture['medicalRecord']), false)
+        ->assertDontSee('Medical Record Report')
+        ->assertDontSee('Prescription Records And Adherence Percentage')
+        ->assertDontSee('View Prescriptions')
+        ->assertDontSee('Open Prescriptions')
         ->assertSee('Milo')
         ->assertSee('Shadow')
         ->assertSee('Canine dermatitis')
-        ->assertViewHas('selectedPatient', function (Pet $selectedPatient) use ($fixture) {
-            return $selectedPatient->pet_id === $fixture['pet']->pet_id;
-        })
-        ->assertViewHas('selectedPatientRecords', function ($selectedPatientRecords) use ($fixture, $otherFixture) {
-            $recordIds = $selectedPatientRecords->pluck('record_id');
-
-            return $recordIds->contains($fixture['medicalRecord']->record_id)
-                && ! $recordIds->contains($otherFixture['medicalRecord']->record_id);
-        })
         ->assertViewHas('patients', function ($patients) use ($fixture, $otherFixture) {
             $patientIds = $patients->pluck('pet_id');
 
@@ -113,6 +123,75 @@ test('veterinarian medical records page loads clinic-wide patient records', func
     $otherPatientResponse->assertOk()
         ->assertSee('Shadow')
         ->assertSee('Ear infection');
+});
+
+test('veterinarian can open a specific medical record report from record list', function () {
+    $vet = User::factory()->create([
+        'role' => 'Veterinarian',
+    ]);
+
+    $first = makeVeterinarianMedicalRecordFixture($vet, [
+        'pet_name' => 'Milo',
+        'diagnosis' => 'Skin irritation',
+    ]);
+
+    $second = makeVeterinarianMedicalRecordFixture($vet, [
+        'pet_name' => 'Luna',
+        'diagnosis' => 'Dental disease',
+    ]);
+
+    $this->actingAs($vet)
+        ->get(route('vet.medical-records.details', $second['medicalRecord']))
+        ->assertOk()
+        ->assertViewIs('medical-records.veterinarian-details')
+        ->assertSee('Record No. '.$second['medicalRecord']->record_id)
+        ->assertSee('Medical Record Report')
+        ->assertSee('Pet / Owner Name And Contact Info')
+        ->assertSee('Prescription Records And Adherence Percentage')
+        ->assertSee('Medical Adherence Record')
+        ->assertSee('Total Amount To Be Taken')
+        ->assertSee('Percentage')
+        ->assertSee('Probiotic Paste')
+        ->assertSee('Taken')
+        ->assertSee('Dental disease')
+        ->assertSee('Luna')
+        ->assertDontSee('Search or filter records')
+        ->assertDontSee('id="medicalRecordsTable"', false)
+        ->assertViewHas('record', function (MedicalRecord $record) use ($second) {
+            return $record->record_id === $second['medicalRecord']->record_id;
+        });
+});
+
+test('veterinarian medical records patients are ordered by latest updated record', function () {
+    $vet = User::factory()->create([
+        'role' => 'Veterinarian',
+    ]);
+
+    $older = makeVeterinarianMedicalRecordFixture($vet, [
+        'pet_name' => 'Older Patient',
+    ]);
+
+    $newer = makeVeterinarianMedicalRecordFixture($vet, [
+        'pet_name' => 'Newer Patient',
+    ]);
+
+    $older['medicalRecord']->forceFill([
+        'created_at' => now()->subDays(5),
+        'updated_at' => now()->subDays(5),
+    ])->saveQuietly();
+
+    $newer['medicalRecord']->forceFill([
+        'created_at' => now()->subDay(),
+        'updated_at' => now(),
+    ])->saveQuietly();
+
+    $this->actingAs($vet)
+        ->get(route('vet.medical-records'))
+        ->assertOk()
+        ->assertViewHas('patients', function ($patients) use ($newer, $older) {
+            return $patients->first()->pet_id === $newer['pet']->pet_id
+                && $patients->last()->pet_id === $older['pet']->pet_id;
+        });
 });
 
 test('example clinic seeder creates current medical record and prescription data', function () {

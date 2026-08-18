@@ -98,7 +98,12 @@ test('staff reports dashboard loads with intake status metrics', function () {
         ->assertViewIs('staff.reports.dashboard')
         ->assertSee('Reports')
         ->assertSee('Taken')
-        ->assertSee('Missed');
+        ->assertSee('Missed')
+        ->assertSee('Cancelled')
+        ->assertDontSee('Completion Rate')
+        ->assertViewHas('totalConsultations', 1)
+        ->assertViewHas('completedConsultations', 1)
+        ->assertViewHas('totalMedicalRecords', 1);
 });
 
 test('staff appointment report loads', function () {
@@ -110,7 +115,9 @@ test('staff appointment report loads', function () {
     $response->assertOk()
         ->assertViewIs('staff.reports.appointments')
         ->assertSee('Appointment Report')
-        ->assertSee('Peanut');
+        ->assertSee('Peanut')
+        ->assertSee('Cancelled')
+        ->assertSee('Missed');
 });
 
 test('staff prescription report loads with current compliance calculation', function () {

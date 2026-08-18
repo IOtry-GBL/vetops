@@ -56,61 +56,63 @@
         </div>
     </div>
 
-    <section class="card" style="margin-top: 1.2rem;">
-        <div class="surface-header">
-            <div>
-                <h2>Medication Details</h2>
-                <p class="section-copy">These instructions are stored directly on the e-prescription record.</p>
+    <div class="details-grid">
+        <section class="card">
+            <div class="surface-header">
+                <div>
+                    <h2>Medication Details</h2>
+                    <p class="section-copy">These instructions are stored directly on the e-prescription record.</p>
+                </div>
             </div>
-        </div>
 
-        <div class="info-grid">
-            <div class="detail-panel">
-                <span class="detail-label">Dosage</span>
-                <p>{{ $prescription->dosage }}</p>
+            <div class="info-grid">
+                <div class="detail-panel">
+                    <span class="detail-label">Dosage</span>
+                    <p>{{ $prescription->dosage }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Frequency</span>
+                    <p>{{ $prescription->frequency }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Duration</span>
+                    <p>{{ $prescription->duration }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Issued At</span>
+                    <p>{{ $prescription->issued_at?->format('F j, Y g:i A') ?? 'Unknown date' }}</p>
+                </div>
             </div>
-            <div class="detail-panel">
-                <span class="detail-label">Frequency</span>
-                <p>{{ $prescription->frequency }}</p>
-            </div>
-            <div class="detail-panel">
-                <span class="detail-label">Duration</span>
-                <p>{{ $prescription->duration }}</p>
-            </div>
-            <div class="detail-panel">
-                <span class="detail-label">Issued At</span>
-                <p>{{ $prescription->issued_at?->format('F j, Y g:i A') ?? 'Unknown date' }}</p>
-            </div>
-        </div>
-    </section>
+        </section>
 
-    <section class="card" style="margin-top: 1.2rem;">
-        <div class="surface-header">
-            <div>
-                <h2>Linked Medical Record</h2>
-                <p class="section-copy">The prescription below is tied to this diagnosis and treatment plan.</p>
+        <section class="card">
+            <div class="surface-header">
+                <div>
+                    <h2>Linked Medical Record</h2>
+                    <p class="section-copy">The prescription below is tied to this diagnosis and treatment plan.</p>
+                </div>
             </div>
-        </div>
 
-        <div class="info-grid">
-            <div class="detail-panel">
-                <span class="detail-label">Diagnosis</span>
-                <p>{{ $record?->diagnosis ?: 'No diagnosis recorded.' }}</p>
+            <div class="info-grid">
+                <div class="detail-panel">
+                    <span class="detail-label">Diagnosis</span>
+                    <p>{{ $record?->diagnosis ?: 'No diagnosis recorded.' }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Treatment Plan</span>
+                    <p>{{ $record?->treatment_plan ?: 'No treatment plan recorded.' }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Vaccination Notes</span>
+                    <p>{{ $record?->vaccination_notes ?: 'No vaccination notes recorded.' }}</p>
+                </div>
+                <div class="detail-panel">
+                    <span class="detail-label">Follow-Up</span>
+                    <p>{{ $record?->follow_up_date?->format('F j, Y') ?? 'Not scheduled' }}</p>
+                </div>
             </div>
-            <div class="detail-panel">
-                <span class="detail-label">Treatment Plan</span>
-                <p>{{ $record?->treatment_plan ?: 'No treatment plan recorded.' }}</p>
-            </div>
-            <div class="detail-panel">
-                <span class="detail-label">Vaccination Notes</span>
-                <p>{{ $record?->vaccination_notes ?: 'No vaccination notes recorded.' }}</p>
-            </div>
-            <div class="detail-panel">
-                <span class="detail-label">Follow-Up</span>
-                <p>{{ $record?->follow_up_date?->format('F j, Y') ?? 'Not scheduled' }}</p>
-            </div>
-        </div>
-    </section>
+        </section>
+    </div>
 
     <section class="card" style="margin-top: 1.2rem;">
         <div class="surface-header">
@@ -146,4 +148,21 @@
             @endforelse
         </div>
     </section>
+@endsection
+
+@section('styles')
+    <style>
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1.2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 @endsection

@@ -31,18 +31,6 @@ class ExampleClinicSeeder extends Seeder
                 'impersonating_role' => null,
             ]
         );
-        User::updateOrCreate(
-            ['email' => 'admin@vetcare.test'],
-            [
-                'full_name' => 'Clinic Admin',
-                'password' => Hash::make('password'),
-                'contact_no' => '0917-000-0000',
-                'role' => 'Admin',
-                'status' => 'Active',
-                'is_super_admin' => false,
-                'impersonating_role' => null,
-            ]
-        );
 
         $vetSarah = User::updateOrCreate(
             ['email' => 'sarah.johnson@vetcare.test'],

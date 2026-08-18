@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\AdherenceNotification;
+use App\Services\AdherenceService;
 use Illuminate\Console\Command;
 
 class MarkExpiredAdherenceAsMissed extends Command
@@ -12,17 +12,9 @@ class MarkExpiredAdherenceAsMissed extends Command
 
     public function handle()
     {
-        $expiredNotifications = AdherenceNotification::where('status', 'Pending')
-            ->where('confirmation_deadline', '<=', now())
-            ->get();
+        $count = AdherenceService::markExpiredAsMissed();
 
-        $count = $expiredNotifications->count();
-
-        foreach ($expiredNotifications as $notification) {
-            $notification->markAsMissed();
-        }
-
-        $this->info("Marked {$count} expired adherence notifications as missed.");
+        $this->info("Marked {$count} expired adherence doses as missed.");
         return Command::SUCCESS;
     }
 }

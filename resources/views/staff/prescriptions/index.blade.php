@@ -14,36 +14,6 @@
         $latestIssuedAt = $pagePrescriptions->first()?->issued_at;
     @endphp
 
-    <section class="hero-card">
-        <div class="hero-row">
-            <div>
-                <h1 class="hero-title">Prescriptions</h1>
-                <p class="hero-copy">
-                    Review every medication issued through clinic medical records, inspect the linked patient data, and open adherence history when needed.
-                </p>
-            </div>
-
-            <div class="metric-grid" style="min-width: min(100%, 460px);">
-                <div class="metric-card">
-                    <span class="metric-label">Total Results</span>
-                    <strong class="metric-value">{{ $prescriptions->total() }}</strong>
-                </div>
-                <div class="metric-card">
-                    <span class="metric-label">Patients On Page</span>
-                    <strong class="metric-value">{{ $patientCount }}</strong>
-                </div>
-                <div class="metric-card">
-                    <span class="metric-label">With Logs</span>
-                    <strong class="metric-value">{{ $withLogsCount }}</strong>
-                </div>
-                <div class="metric-card">
-                    <span class="metric-label">Latest Issued</span>
-                    <strong class="metric-value">{{ $latestIssuedAt?->format('M j, Y') ?? 'No data' }}</strong>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <section class="card">
         <div class="surface-header">
             <div>
@@ -83,7 +53,7 @@
             </div>
         </div>
 
-        <div class="list-grid">
+        <div class="table-responsive">
             @forelse ($prescriptions as $prescription)
                 @php
                     $record = $prescription->medicalRecord;
@@ -95,58 +65,86 @@
                         ? round(($adherenceLogs->where('intake_status', 'Taken')->count() / $adherenceLogs->count()) * 100)
                         : null;
                 @endphp
-
-                <article class="record-card">
-                    <div>
-                        <div class="action-row">
-                            <div>
-                                <div class="item-title">{{ $prescription->medication_name }}</div>
-                                <p class="item-copy" style="margin-top: 0.3rem;">
-                                    {{ $pet?->name ?? 'Unknown Pet' }}{{ $pet?->species ? ' / '.$pet->species : '' }}{{ $pet?->breed ? ' - '.$pet->breed : '' }}
-                                </p>
-                            </div>
-
-                            <span class="pill {{ $adherenceRate !== null && $adherenceRate >= 80 ? 'pill-success' : 'pill-neutral' }}">
-                                {{ $adherenceRate !== null ? $adherenceRate.'% adherence' : 'No logs yet' }}
-                            </span>
-                        </div>
-
-                        <div class="info-grid" style="margin-top: 1rem;">
-                            <div class="detail-panel">
-                                <span class="detail-label">Owner</span>
-                                <p>{{ $owner?->name ?? 'Unknown Owner' }}</p>
-                            </div>
-                            <div class="detail-panel">
-                                <span class="detail-label">Veterinarian</span>
-                                <p>{{ $veterinarian?->name ? 'Dr. '.$veterinarian->name : 'Not assigned' }}</p>
-                            </div>
-                            <div class="detail-panel">
-                                <span class="detail-label">Medical Record</span>
-                                <p>{{ $record?->record_id ? 'Record '.$record->record_id : 'No record linked' }}</p>
-                            </div>
-                            <div class="detail-panel">
-                                <span class="detail-label">Issued</span>
-                                <p>{{ $prescription->issued_at?->format('M j, Y g:i A') ?? 'Unknown date' }}</p>
-                            </div>
-                        </div>
-
-                        <p class="item-copy" style="margin-top: 1rem;">
-                            {{ $prescription->dosage }} / {{ $prescription->frequency }} / {{ $prescription->duration }}
-                        </p>
-
-                        <p class="item-copy" style="margin-top: 0.35rem;">
-                            Diagnosis: {{ $record?->diagnosis ?: 'No diagnosis recorded.' }}
-                        </p>
-                    </div>
-
-                    <div class="stack record-actions">
-                        <span class="pill pill-neutral">{{ $adherenceLogs->count() }} adherence log{{ $adherenceLogs->count() === 1 ? '' : 's' }}</span>
-                        <a href="{{ route('staff.prescriptions.details', $prescription->prescription_id) }}" class="btn btn-primary">Open Prescription</a>
-                        @if ($record)
-                            <a href="{{ route('staff.medical-records.details', $record->record_id) }}" class="btn btn-secondary">View Medical Record</a>
-                        @endif
-                    </div>
-                </article>
+                @if ($loop->first)
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Medication</th>
+                                <th>Patient</th>
+                                <th>Owner</th>
+                                <th>Veterinarian</th>
+                                <th>Dosage</th>
+                                <th>Issued</th>
+                                <th>Issued Ends</th>
+                                <th>Adherence</th>
+                                <th>Logs</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                @endif
+                @if ($loop->iteration <= 5)
+                            <tr>
+                                <td class="col-medication">
+                                    <strong>{{ $prescription->medication_name }}</strong>
+                                </td>
+                                <td class="col-patient">
+                                    <div>{{ $pet?->name ?? 'Unknown Pet' }}</div>
+                                    <div class="text-secondary" style="font-size: 0.875rem;">
+                                        {{ $pet?->species ? $pet->species : '' }}{{ $pet?->breed ? ' - '.$pet->breed : '' }}
+                                    </div>
+                                </td>
+                                <td class="col-owner">
+                                    {{ $owner?->name ?? 'Unknown Owner' }}
+                                </td>
+                                <td class="col-vet">
+                                    {{ $veterinarian?->name ? 'Dr. '.$veterinarian->name : 'Not assigned' }}
+                                </td>
+                                <td class="col-dosage">
+                                    <small>{{ $prescription->dosage }} / {{ $prescription->frequency }} / {{ $prescription->duration }}</small>
+                                </td>
+                                <td class="col-issued">
+                                    {{ $prescription->issued_at?->format('M j, Y') ?? 'Unknown' }}
+                                </td>
+                                <td class="col-issued-ends">
+                                    @php
+                                        $endDate = null;
+                                        if ($prescription->issued_at && $prescription->duration) {
+                                            $durationText = strtolower($prescription->duration);
+                                            preg_match('/(\d+)/', $durationText, $matches);
+                                            $durationNum = (int)($matches[1] ?? 0);
+                                            
+                                            if (strpos($durationText, 'week') !== false) {
+                                                $durationNum *= 7;
+                                            }
+                                            
+                                            $endDate = $prescription->issued_at->copy()->addDays($durationNum);
+                                        }
+                                    @endphp
+                                    {{ $endDate?->format('M j, Y') ?? 'Unknown' }}
+                                </td>
+                                <td class="col-adherence">
+                                    <span class="pill {{ $adherenceRate !== null && $adherenceRate >= 80 ? 'pill-success' : 'pill-neutral' }}">
+                                        {{ $adherenceRate !== null ? $adherenceRate.'%' : 'No logs' }}
+                                    </span>
+                                </td>
+                                <td class="col-logs">
+                                    <span class="pill pill-neutral">{{ $adherenceLogs->count() }}</span>
+                                </td>
+                                <td class="col-actions">
+                                    <div class="action-buttons">
+                                        <a href="{{ route('staff.prescriptions.details', $prescription->prescription_id) }}" class="btn btn-sm btn-primary" title="Open Prescription">View</a>
+                                        @if ($record)
+                                            <a href="{{ route('staff.medical-records.details', $record->record_id) }}" class="btn btn-sm btn-secondary" title="View Medical Record">Record</a>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                @endif
+                @if ($loop->last)
+                        </tbody>
+                    </table>
+                @endif
             @empty
                 <div class="empty-state">
                     No prescriptions matched the current filters.
@@ -164,24 +162,179 @@
 
 @section('styles')
     <style>
-        .record-card {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
-            gap: 1.25rem;
-            padding: 1.25rem;
-            border: 1px solid var(--shell-line);
-            border-radius: var(--shell-radius-lg);
-            background: rgba(255, 255, 255, 0.88);
+        .table-responsive {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--shell-line, #e0e0e0);
+            border-radius: var(--shell-radius-lg, 0.5rem);
         }
 
-        .record-actions {
-            min-width: 0;
-            justify-content: center;
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9375rem;
         }
 
-        @media (max-width: 960px) {
-            .record-card {
-                grid-template-columns: 1fr;
+        .data-table thead {
+            background: var(--shell-surface-secondary, #f5f5f5);
+            border-bottom: 2px solid var(--shell-line, #e0e0e0);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table th {
+            padding: 0.875rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary, #333);
+            white-space: nowrap;
+        }
+
+        .data-table tbody tr {
+            border-bottom: 1px solid var(--shell-line, #e0e0e0);
+            transition: background-color 0.2s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .data-table td {
+            padding: 1rem;
+            vertical-align: middle;
+        }
+
+        .data-table .col-medication {
+            font-weight: 500;
+            min-width: 150px;
+        }
+
+        .data-table .col-patient {
+            min-width: 140px;
+        }
+
+        .data-table .col-patient .text-secondary {
+            color: var(--text-secondary, #666);
+            margin-top: 0.25rem;
+        }
+
+        .data-table .col-owner,
+        .data-table .col-vet {
+            min-width: 130px;
+        }
+
+        .data-table .col-dosage {
+            min-width: 120px;
+            color: var(--text-secondary, #666);
+        }
+
+        .data-table .col-issued {
+            min-width: 100px;
+        }
+
+        .data-table .col-issued-ends {
+            min-width: 100px;
+        }
+
+        .data-table .col-adherence {
+            min-width: 100px;
+        }
+
+        .data-table .col-logs {
+            text-align: center;
+            min-width: 70px;
+        }
+
+        .data-table .col-actions {
+            text-align: right;
+            min-width: 160px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 0.375rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+
+        .pill-success {
+            background-color: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .pill-neutral {
+            background-color: rgba(107, 114, 128, 0.1);
+            color: #6b7280;
+        }
+
+        @media (max-width: 1024px) {
+            .data-table {
+                font-size: 0.875rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.75rem 0.625rem;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .btn-sm {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .table-responsive {
+                border: 1px solid var(--shell-line, #e0e0e0);
+                border-radius: var(--shell-radius-lg, 0.5rem);
+            }
+
+            .data-table {
+                font-size: 0.8125rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.625rem;
+            }
+
+            .data-table .col-dosage,
+            .data-table .col-issued,
+            .data-table .col-issued-ends {
+                display: none;
+            }
+
+            .action-buttons {
+                flex-direction: row;
+                gap: 0.25rem;
+            }
+
+            .btn-sm {
+                width: auto;
+                padding: 0.25rem 0.5rem;
             }
         }
     </style>

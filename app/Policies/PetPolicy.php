@@ -30,7 +30,7 @@ class PetPolicy
         }
 
         // Admin can view all pets
-        if ($user->role === 'Pet Owner') {
+        if ($user->role === 'Admin') {
             return true;
         }
 

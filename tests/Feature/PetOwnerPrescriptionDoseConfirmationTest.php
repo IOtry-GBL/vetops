@@ -94,14 +94,153 @@ test('pet owner prescriptions page shows direct dose confirmation controls', fun
         'with_notification' => true,
     ]);
 
+    AdherenceLog::create([
+        'prescription_id' => $fixture['prescription']->prescription_id,
+        'scheduled_datetime' => Carbon::create(2026, 4, 21, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 21, 4, 30, 0, 'UTC'),
+        'intake_status' => 'Pending',
+        'is_notified' => false,
+    ]);
+
     $response = $this->actingAs($fixture['owner'])
         ->get(route('pet-owner.prescriptions'));
 
     $response->assertOk()
-        ->assertSee('Dose Confirmations')
+        ->assertSee('Dose Confirmation')
+        ->assertSee('Next Dose')
+        ->assertSee('Ready To Confirm')
         ->assertSee('Confirm Dose')
-        ->assertSee('View Full History')
+        ->assertSee('Apr 20, 2026 9:30 AM PH')
+        ->assertDontSee('Apr 21, 2026 9:30 AM PH')
         ->assertSee($fixture['prescription']->medication_name);
+
+    Carbon::setTestNow();
+});
+
+test('active prescriptions are listed first by oldest issued time and create next dose notification', function () {
+    Carbon::setTestNow(Carbon::create(2026, 4, 20, 2, 0, 0, 'UTC'));
+
+    $finished = makePetOwnerPrescriptionDoseFixture([
+        'medication_name' => 'Finished Med',
+        'issued_at' => Carbon::create(2026, 4, 20, 1, 0, 0, 'UTC'),
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 4, 30, 0, 'UTC'),
+        'intake_status' => 'Taken',
+        'with_notification' => false,
+    ]);
+
+    $olderActive = EPrescription::create([
+        'record_id' => $finished['record']->record_id,
+        'medication_name' => 'Older Active Med',
+        'dosage' => '5 mg',
+        'frequency' => 'Once daily',
+        'duration' => '2 days',
+        'issued_at' => Carbon::create(2026, 4, 20, 2, 0, 0, 'UTC'),
+    ]);
+
+    $olderActiveLog = AdherenceLog::create([
+        'prescription_id' => $olderActive->prescription_id,
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 2, 0, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 5, 0, 0, 'UTC'),
+        'intake_status' => 'Pending',
+        'is_notified' => false,
+    ]);
+
+    $newerActive = EPrescription::create([
+        'record_id' => $finished['record']->record_id,
+        'medication_name' => 'Newer Active Med',
+        'dosage' => '15 mg',
+        'frequency' => 'Once daily',
+        'duration' => '2 days',
+        'issued_at' => Carbon::create(2026, 4, 20, 3, 0, 0, 'UTC'),
+    ]);
+
+    AdherenceLog::create([
+        'prescription_id' => $newerActive->prescription_id,
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 3, 0, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 6, 0, 0, 'UTC'),
+        'intake_status' => 'Pending',
+        'is_notified' => false,
+    ]);
+
+    $response = $this->actingAs($finished['owner'])
+        ->get(route('pet-owner.prescriptions'));
+
+    $response->assertOk()
+        ->assertSeeInOrder([
+            'Older Active Med',
+            'Newer Active Med',
+            'Finished Med',
+        ])
+        ->assertDontSee('next-dose-card');
+
+    $this->assertDatabaseHas('adherence_notifications', [
+        'adherence_id' => $olderActiveLog->adherence_id,
+        'status' => 'Pending',
+    ]);
+
+    Carbon::setTestNow();
+});
+
+test('pet owner prescriptions page marks expired pending doses as missed', function () {
+    Carbon::setTestNow(Carbon::create(2026, 4, 20, 6, 0, 0, 'UTC'));
+
+    $fixture = makePetOwnerPrescriptionDoseFixture([
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 4, 30, 0, 'UTC'),
+        'with_notification' => false,
+    ]);
+
+    $response = $this->actingAs($fixture['owner'])
+        ->get(route('pet-owner.prescriptions'));
+
+    $response->assertOk()
+        ->assertSee('No active confirmation')
+        ->assertDontSee('Window Closed')
+        ->assertDontSee('Dose was not confirmed in time.');
+
+    $this->assertDatabaseHas('adherence_logs', [
+        'adherence_id' => $fixture['adherenceLog']->adherence_id,
+        'intake_status' => 'Missed',
+    ]);
+
+    $this->assertDatabaseHas('adherence_notifications', [
+        'adherence_id' => $fixture['adherenceLog']->adherence_id,
+        'status' => 'Missed',
+    ]);
+
+    Carbon::setTestNow();
+});
+
+test('pet owner prescriptions page advances schedule to next pending dose day', function () {
+    Carbon::setTestNow(Carbon::create(2026, 4, 20, 2, 0, 0, 'UTC'));
+
+    $fixture = makePetOwnerPrescriptionDoseFixture([
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 4, 30, 0, 'UTC'),
+        'intake_status' => 'Taken',
+        'with_notification' => false,
+    ]);
+
+    $nextLog = AdherenceLog::create([
+        'prescription_id' => $fixture['prescription']->prescription_id,
+        'scheduled_datetime' => Carbon::create(2026, 4, 21, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 21, 4, 30, 0, 'UTC'),
+        'intake_status' => 'Pending',
+        'is_notified' => false,
+    ]);
+
+    $response = $this->actingAs($fixture['owner'])
+        ->get(route('pet-owner.prescriptions'));
+
+    $response->assertOk()
+        ->assertSee('Apr 21, 2026 9:30 AM PH')
+        ->assertDontSee('Apr 20, 2026 9:30 AM PH');
+
+    $this->assertDatabaseHas('adherence_notifications', [
+        'adherence_id' => $nextLog->adherence_id,
+        'status' => 'Pending',
+    ]);
 
     Carbon::setTestNow();
 });
@@ -130,6 +269,37 @@ test('pet owner can confirm a due dose directly from the prescriptions page', fu
         'adherence_id' => $fixture['adherenceLog']->adherence_id,
         'status' => 'Confirmed',
     ]);
+
+    Carbon::setTestNow();
+});
+
+test('confirmed dose is hidden from confirmation ui but remains stored', function () {
+    Carbon::setTestNow(Carbon::create(2026, 4, 20, 2, 0, 0, 'UTC'));
+
+    $fixture = makePetOwnerPrescriptionDoseFixture([
+        'scheduled_datetime' => Carbon::create(2026, 4, 20, 1, 30, 0, 'UTC'),
+        'confirmation_deadline' => Carbon::create(2026, 4, 20, 4, 30, 0, 'UTC'),
+        'with_notification' => false,
+    ]);
+
+    $this->actingAs($fixture['owner'])
+        ->from(route('pet-owner.prescriptions'))
+        ->post(route('adherence.confirm-dose', $fixture['adherenceLog']));
+
+    $response = $this->actingAs($fixture['owner'])
+        ->get(route('pet-owner.prescriptions'));
+
+    $response->assertOk()
+        ->assertSee('No active confirmation')
+        ->assertDontSee('Apr 20, 2026 9:30 AM PH')
+        ->assertDontSee('Confirm Dose');
+
+    $this->assertDatabaseHas('adherence_logs', [
+        'adherence_id' => $fixture['adherenceLog']->adherence_id,
+        'intake_status' => 'Taken',
+    ]);
+
+    $this->assertDatabaseCount('adherence_logs', 1);
 
     Carbon::setTestNow();
 });
