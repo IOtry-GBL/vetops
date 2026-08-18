@@ -66,9 +66,15 @@
                 </div>
 
                 <div class="field">
-                    <label class="field-label" for="appointment_date">Date And Time</label>
-                    <input id="appointment_date" name="appointment_date" type="datetime-local" class="field-control" value="{{ old('appointment_date') }}" required>
+                    <label class="field-label">Date And Time</label>
+                    @include('appointments.partials.calendar-picker', [
+                        'pickerId' => 'vet_create_appointment_picker',
+                        'bookedAppointments' => $bookedAppointments ?? [],
+                    ])
                     @error('appointment_date')
+                        <p class="field-error">{{ $message }}</p>
+                    @enderror
+                    @error('appointment_time')
                         <p class="field-error">{{ $message }}</p>
                     @enderror
                 </div>

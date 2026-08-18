@@ -73,6 +73,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/medical-records', [VeterinarianController::class, 'medicalRecords'])->name('medical-records');
         Route::get('/prescriptions', [VeterinarianController::class, 'prescriptions'])->name('prescriptions');
         Route::post('/prescriptions', [VeterinarianController::class, 'storePrescription'])->name('prescriptions.store');
+        Route::put('/prescriptions/{prescription}', [VeterinarianController::class, 'updatePrescription'])->name('prescriptions.update');
         Route::get('/adherence-monitoring', [VeterinarianController::class, 'adherenceMonitoring'])->name('adherence-monitoring');
         Route::post('/adherence/{prescription}/update', [VeterinarianController::class, 'updateAdherence'])->name('adherence.update');
     });

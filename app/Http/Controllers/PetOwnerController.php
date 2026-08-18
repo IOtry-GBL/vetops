@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Pet;
 use App\Models\Appointment;
 use App\Models\EPrescription;
+use App\Services\AppointmentScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 
 class PetOwnerController extends Controller
 {
@@ -18,9 +20,28 @@ class PetOwnerController extends Controller
     {
         $user = Auth::user();
         $pets = $user->pets()->get();
-        $upcomingAppointments = Appointment::whereHas('pet', function ($query) use ($user) {
+        $appointmentQuery = Appointment::whereHas('pet', function ($query) use ($user) {
             $query->where('user_id', $user->user_id);
-        })->whereNotIn('status', ['Cancelled', 'Completed', 'Missed'])->orderBy('appointment_date')->take(4)->get();
+        })->with('pet');
+
+        $upcomingAppointments = (clone $appointmentQuery)
+            ->whereNotIn('status', ['Cancelled', 'Completed', 'Missed'])
+            ->orderBy('appointment_date')
+            ->orderBy('appointment_time')
+            ->take(4)
+            ->get();
+
+        $appointmentSchedules = (clone $appointmentQuery)
+            ->whereNotIn('status', ['Cancelled', 'Completed', 'Missed'])
+            ->orderBy('appointment_date')
+            ->orderBy('appointment_time')
+            ->get();
+
+        $processedAppointments = (clone $appointmentQuery)
+            ->whereIn('status', ['Completed', 'Cancelled', 'Missed'])
+            ->orderByDesc('appointment_date')
+            ->orderByDesc('appointment_time')
+            ->get();
         
         $prescriptions = EPrescription::whereHas('medicalRecord.pet', function ($query) use ($user) {
             $query->where('user_id', $user->user_id);
@@ -28,7 +49,7 @@ class PetOwnerController extends Controller
             ->orderByDesc('issued_at')
             ->get();
 
-        return view('pet-owner.dashboard', compact('pets', 'upcomingAppointments', 'prescriptions'));
+        return view('pet-owner.dashboard', compact('pets', 'upcomingAppointments', 'appointmentSchedules', 'processedAppointments', 'prescriptions'));
     }
 
     /**
@@ -37,7 +58,7 @@ class PetOwnerController extends Controller
     public function pets()
     {
         $user = Auth::user();
-        $pets = $user->pets()->with('medicalRecords')->get();
+        $pets = $user->pets()->with(['medicalRecords', 'appointments'])->get();
         
         return view('pet-owner.pets', compact('pets'));
     }
@@ -136,7 +157,9 @@ class PetOwnerController extends Controller
         
         $pets = $user->pets()->get();
         
-        return view('pet-owner.appointments', compact('upcomingAppointments', 'missedAppointments', 'completedAppointments', 'pets'));
+        $bookedAppointments = AppointmentScheduleService::bookedAppointments();
+
+        return view('pet-owner.appointments', compact('upcomingAppointments', 'missedAppointments', 'completedAppointments', 'pets', 'bookedAppointments'));
     }
 
     /**
@@ -243,8 +266,9 @@ class PetOwnerController extends Controller
         $user = Auth::user();
         $pets = $user->pets()->get();
         $unavailablePetIds = Appointment::query()->activeEntries()->pluck('pet_id')->all();
+        $bookedAppointments = AppointmentScheduleService::bookedAppointments();
 
-        return view('pet-owner.book-appointment', compact('pets', 'unavailablePetIds'));
+        return view('pet-owner.book-appointment', compact('pets', 'unavailablePetIds', 'bookedAppointments'));
     }
 
     /**
@@ -252,14 +276,7 @@ class PetOwnerController extends Controller
      */
     public function storeAppointmentRequest(\Illuminate\Http\Request $request)
     {
-        $appointmentDateTime = $request->input('appointment_date');
-        if ($appointmentDateTime && str_contains($appointmentDateTime, 'T') && !$request->filled('appointment_time')) {
-            [$date, $time] = explode('T', $appointmentDateTime, 2);
-            $request->merge([
-                'appointment_date' => $date,
-                'appointment_time' => $time,
-            ]);
-        }
+        AppointmentScheduleService::normalizeDateTimeInput($request);
 
         if (!$request->filled('consultation_mode')) {
             $request->merge(['consultation_mode' => 'In-clinic']);
@@ -268,13 +285,21 @@ class PetOwnerController extends Controller
         $reason = $request->input('reason_for_visit') ?? $request->input('reason');
         $request->merge(['reason' => $reason]);
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'pet_id' => 'required|exists:pets,pet_id',
             'appointment_date' => 'required|date_format:Y-m-d',
             'appointment_time' => 'required|date_format:H:i',
             'consultation_mode' => 'required|in:In-clinic,Teleconsultation',
             'reason' => 'required|string',
         ]);
+        $validator->after(function ($validator) use ($request) {
+            if ($request->filled('pet_id') && Appointment::petHasActiveEntry((int) $request->input('pet_id'))) {
+                return;
+            }
+
+            AppointmentScheduleService::validateSlot($validator, $request);
+        });
+        $validated = $validator->validate();
 
         $user = Auth::user();
         $pet = Pet::findOrFail($validated['pet_id']);
@@ -370,19 +395,14 @@ class PetOwnerController extends Controller
             return redirect()->back()->with('error', 'You can only reschedule pending or confirmed appointments');
         }
 
-        $appointmentDateTime = $request->input('appointment_date');
-        if ($appointmentDateTime && str_contains($appointmentDateTime, 'T') && !$request->filled('appointment_time')) {
-            [$date, $time] = explode('T', $appointmentDateTime, 2);
-            $request->merge([
-                'appointment_date' => $date,
-                'appointment_time' => $time,
-            ]);
-        }
+        AppointmentScheduleService::normalizeDateTimeInput($request);
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'appointment_date' => 'required|date_format:Y-m-d',
             'appointment_time' => 'required|date_format:H:i',
         ]);
+        $validator->after(fn ($validator) => AppointmentScheduleService::validateSlot($validator, $request, $appointment->id));
+        $validated = $validator->validate();
 
         $appointment->update([
             'appointment_date' => $validated['appointment_date'],

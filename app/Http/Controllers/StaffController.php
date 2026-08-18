@@ -10,8 +10,10 @@ use App\Models\User;
 use App\Models\MedicalRecord;
 use App\Models\EPrescription;
 use App\Models\AdherenceLog;
+use App\Services\AppointmentScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Validator;
 
 class StaffController extends Controller
 {
@@ -45,8 +47,19 @@ class StaffController extends Controller
             ->orderBy('appointment_time', 'asc')
             ->get();
         
+        // Get emergency appointments (where pet has emergency symptom log)
+        $emergencyAppointments = Appointment::whereIn('pet_id', 
+            SymptomLog::where('concern_level', 'emergency')
+                ->distinct()
+                ->pluck('pet_id')
+        )
+            ->where('appointment_date', '>=', now()->toDateString())
+            ->with('pet.owner')
+            ->orderBy('appointment_date', 'asc')
+            ->get();
+        
         // Get regular check-ups (appointments not related to emergencies)
-$regularAppointments = Appointment::where('status', 'Approved')
+        $regularAppointments = Appointment::where('status', 'Approved')
             ->where('appointment_date', '>=', now()->toDateString())
             ->with('pet.owner')
             ->orderBy('appointment_date', 'asc')
@@ -72,7 +85,37 @@ $regularAppointments = Appointment::where('status', 'Approved')
             ->limit(5)
             ->get();
 
-        return view('staff.dashboard', compact('allAppointments', 'todayAppointments', 'pending', 'emergencies', 'pendingRequests', 'upcomingApprovedAppointments', 'todayListAppointments', 'regularAppointments', 'missedApprovedAppointments', 'recentPending'));
+        return view('staff.dashboard', compact('allAppointments', 'todayAppointments', 'pending', 'emergencies', 'pendingRequests', 'upcomingApprovedAppointments', 'todayListAppointments', 'emergencyAppointments', 'regularAppointments', 'missedApprovedAppointments', 'recentPending'));
+    }
+
+    /**
+     * Return upcoming approved appointments as JSON for the calendar
+     */
+    public function upcomingAppointmentsJson()
+    {
+        $appointments = Appointment::where('status', 'Approved')
+            ->where('appointment_date', '>=', now()->toDateString())
+            ->with('pet.owner')
+            ->orderBy('appointment_date', 'asc')
+            ->get()
+            ->map(function ($apt) {
+                return [
+                    'appointment_id' => $apt->appointment_id,
+                    'appointment_date' => $apt->appointment_date?->toDateTimeString(),
+                    'reason' => $apt->reason,
+                    'status' => $apt->status,
+                    'pet' => [
+                        'name' => $apt->pet?->name,
+                        'species' => $apt->pet?->species,
+                    ],
+                    'owner' => [
+                        'name' => $apt->pet?->owner?->name,
+                        'phone' => $apt->pet?->owner?->phone,
+                    ],
+                ];
+            });
+
+        return response()->json(['appointments' => $appointments]);
     }
 
     /**
@@ -120,8 +163,9 @@ $regularAppointments = Appointment::where('status', 'Approved')
     {
         $appointment = Appointment::findOrFail($id);
         $vets = User::where('role', 'Veterinarian')->get();
+        $bookedAppointments = AppointmentScheduleService::bookedAppointments($appointment->id);
 
-        return view('staff.confirm-appointment', compact('appointment', 'vets'));
+        return view('staff.confirm-appointment', compact('appointment', 'vets', 'bookedAppointments'));
     }
 
     /**
@@ -132,8 +176,9 @@ $regularAppointments = Appointment::where('status', 'Approved')
         $pets = Pet::with('owner')->get();
         $vets = User::where('role', 'Veterinarian')->get();
         $unavailablePetIds = Appointment::query()->activeEntries()->pluck('pet_id')->all();
+        $bookedAppointments = AppointmentScheduleService::bookedAppointments();
 
-        return view('staff.create-appointment', compact('pets', 'vets', 'unavailablePetIds'));
+        return view('staff.create-appointment', compact('pets', 'vets', 'unavailablePetIds', 'bookedAppointments'));
     }
 
     /**
@@ -141,14 +186,7 @@ $regularAppointments = Appointment::where('status', 'Approved')
      */
     public function storeAppointment(Request $request)
     {
-        $appointmentDateTime = $request->input('appointment_date');
-        if ($appointmentDateTime && str_contains($appointmentDateTime, 'T') && !$request->filled('appointment_time')) {
-            [$date, $time] = explode('T', $appointmentDateTime, 2);
-            $request->merge([
-                'appointment_date' => $date,
-                'appointment_time' => $time,
-            ]);
-        }
+        AppointmentScheduleService::normalizeDateTimeInput($request);
 
         if (!$request->filled('consultation_mode')) {
             $request->merge(['consultation_mode' => 'In-clinic']);
@@ -172,7 +210,7 @@ $regularAppointments = Appointment::where('status', 'Approved')
             $request->merge(['status' => 'Pending']);
         }
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'pet_id' => 'required|exists:pets,pet_id',
             'appointment_date' => 'required|date_format:Y-m-d',
             'appointment_time' => 'required|date_format:H:i',
@@ -181,6 +219,14 @@ $regularAppointments = Appointment::where('status', 'Approved')
             'status' => 'required|in:Pending,Approved,Rescheduled,Completed,Cancelled',
             'vet_id' => 'nullable|exists:users,user_id',
         ]);
+        $validator->after(function ($validator) use ($request) {
+            if ($request->filled('pet_id') && Appointment::petHasActiveEntry((int) $request->input('pet_id'))) {
+                return;
+            }
+
+            AppointmentScheduleService::validateSlot($validator, $request);
+        });
+        $validated = $validator->validate();
 
         if (Appointment::petHasActiveEntry((int) $validated['pet_id'])) {
             return back()
@@ -224,14 +270,7 @@ $regularAppointments = Appointment::where('status', 'Approved')
     {
         $appointment = Appointment::findOrFail($id);
 
-        $appointmentDateTime = $request->input('appointment_date');
-        if ($appointmentDateTime && str_contains($appointmentDateTime, 'T') && !$request->filled('appointment_time')) {
-            [$date, $time] = explode('T', $appointmentDateTime, 2);
-            $request->merge([
-                'appointment_date' => $date,
-                'appointment_time' => $time,
-            ]);
-        }
+        AppointmentScheduleService::normalizeDateTimeInput($request);
 
         if (!$request->filled('consultation_mode')) {
             $request->merge(['consultation_mode' => 'In-clinic']);
@@ -249,13 +288,15 @@ $regularAppointments = Appointment::where('status', 'Approved')
             $request->merge(['status' => $statusMap[$normalized] ?? $request->input('status')]);
         }
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'appointment_date' => 'required|date_format:Y-m-d',
             'appointment_time' => 'required|date_format:H:i',
             'consultation_mode' => 'required|in:In-clinic,Teleconsultation',
             'status' => 'required|in:Pending,Approved,Rescheduled,Completed,Cancelled',
             'vet_id' => 'nullable|exists:users,user_id',
         ]);
+        $validator->after(fn ($validator) => AppointmentScheduleService::validateSlot($validator, $request, $appointment->id));
+        $validated = $validator->validate();
 
         $appointment->update([
             'appointment_date' => $validated['appointment_date'],
@@ -810,9 +851,11 @@ $regularAppointments = Appointment::where('status', 'Approved')
      */
     private function pendingAppointmentQueueData(): array
     {
+        $totalPendingAppointments = Appointment::where('status', 'Pending')->count();
         $pendingAppointments = Appointment::where('status', 'Pending')
             ->with(['pet.owner', 'pet.symptomLogs'])
-            ->orderBy('appointment_date')
+            ->orderByDesc('created_at')
+            ->limit(10)
             ->get();
 
         $emergencyQueue = $pendingAppointments->filter(function ($appointment) {
@@ -832,7 +875,7 @@ $regularAppointments = Appointment::where('status', 'Approved')
                 && ! $highPriorityQueue->contains('id', $appointment->id);
         });
 
-        return compact('pendingAppointments', 'emergencyQueue', 'highPriorityQueue', 'routineQueue');
+        return compact('pendingAppointments', 'totalPendingAppointments', 'emergencyQueue', 'highPriorityQueue', 'routineQueue');
     }
 
     /**

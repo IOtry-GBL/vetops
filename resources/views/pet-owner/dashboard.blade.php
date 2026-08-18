@@ -49,6 +49,63 @@
     </div>
 
     <div class="card">
+        <div class="section-head" style="margin-bottom: 1rem;">
+            <div>
+                <h2>Appointment Schedules</h2>
+                <p class="muted-copy">Upcoming and active appointment requests.</p>
+            </div>
+            <a href="{{ route('pet-owner.appointments.book') }}" class="btn btn-primary">Book Appointment</a>
+        </div>
+
+       
+    </div>
+
+    <div class="card">
+        <div class="section-head" style="margin-bottom: 1rem;">
+            <div>
+                <h2>Processed Appointments</h2>
+                <p class="muted-copy">Completed, cancelled, and missed appointment records.</p>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="app-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Pet</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($processedAppointments as $appointment)
+                        @php
+                            $statusClass = match($appointment->status) {
+                                'Completed' => 'status-complete',
+                                'Missed', 'Cancelled' => 'status-danger',
+                                default => 'status-open',
+                            };
+                        @endphp
+                        <tr>
+                            <td>{{ $appointment->appointment_date->format('M d, Y') }}</td>
+                            <td>{{ $appointment->appointment_date->format('h:i A') }}</td>
+                            <td>{{ $appointment->pet->name }}</td>
+                            <td>{{ $appointment->reason ?? 'N/A' }}</td>
+                            <td><span class="status-badge {{ $statusClass }}">{{ $appointment->status }}</span></td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #6b7280;">No processed appointments yet.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
         <h2>Your Pets ({{ $pets->count() }})</h2>
         <div style="display: grid; gap: 1rem;">
             @forelse($pets as $pet)
@@ -74,7 +131,7 @@
         <h2>Quick Actions</h2>
         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
             <a href="{{ route('pet-owner.symptom-checker') }}" class="btn btn-primary">Start AI Symptom Check</a>
-            <a href="{{ route('pet-owner.appointments') }}" class="btn btn-secondary">Book Appointment</a>
+            <a href="{{ route('pet-owner.appointments.book') }}" class="btn btn-secondary">Book Appointment</a>
         </div>
     </div>
 @endsection

@@ -42,24 +42,116 @@
                 <h2 style="margin: 0;">Emergency Cases ({{ $emergencies->count() }})</h2>
             </div>
 
-            <div style="display: grid; gap: 1rem;">
-                @foreach($emergencies->sortByDesc('created_at')->take(5) as $emergency)
-                    <div style="padding: 1rem; background: #fee2e2; border-radius: 0.375rem; border-left: 4px solid #ef4444;">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div style="flex: 1;">
-                                <strong>{{ $emergency->pet->name ?? 'Patient' }}</strong>
-                                <p style="margin: 0.5rem 0 0 0; color: #6b7280; font-size: 0.875rem;">Symptom: {{ $emergency->chief_symptom ?? 'No details recorded' }}</p>
-                                <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">Level: {{ $emergency->concern_level }}</p>
-                            </div>
-                            <div style="text-align: right;">
-                                <a href="{{ route('vet.appointments') }}" class="btn btn-primary" style="padding: 0.5rem 0.75rem; font-size: 0.75rem; text-decoration: none; display: inline-block;">Review</a>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
+            <div class="table-wrap">
+                <table class="app-table">
+                    <thead>
+                        <tr><th>Added</th><th>Pet</th><th>Symptom</th><th>Level</th><th>Action</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach($emergencies->sortByDesc('created_at')->take(10) as $emergency)
+                            <tr>
+                                <td>{{ $emergency->created_at?->format('M d, Y h:i A') ?? 'N/A' }}</td>
+                                <td>{{ $emergency->pet->name ?? 'Patient' }}</td>
+                                <td>{{ $emergency->chief_symptom ?? 'No details recorded' }}</td>
+                                <td><span class="status-badge status-danger">{{ $emergency->concern_level }}</span></td>
+                                <td><a href="{{ route('vet.appointments') }}" class="btn btn-primary" style="min-height: 36px; padding: 0.45rem 0.75rem;">Review</a></td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
         </div>
     @endif
+
+    <div class="card">
+        <div class="surface-header">
+            <div>
+                <h2>Recent Appointments</h2>
+                <p class="section-copy">Latest 10 assigned appointment records.</p>
+            </div>
+            <a href="{{ route('vet.appointments') }}" class="btn btn-secondary">See All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="app-table">
+                <thead>
+                    <tr><th>Date</th><th>Time</th><th>Pet</th><th>Owner</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    @forelse($recentAppointments as $appointment)
+                        <tr>
+                            <td>{{ $appointment->appointment_date?->format('M d, Y') ?? 'TBD' }}</td>
+                            <td>{{ $appointment->appointment_date?->format('h:i A') ?? 'TBD' }}</td>
+                            <td>{{ $appointment->pet?->name ?? 'Unknown Pet' }}</td>
+                            <td>{{ $appointment->pet?->owner?->name ?? 'Unknown Owner' }}</td>
+                            <td><span class="status-badge status-open">{{ $appointment->status }}</span></td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" style="text-align: center; color: #6b7280;">No appointment records yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="surface-header">
+            <div>
+                <h2>Recent Medical Records</h2>
+                <p class="section-copy">Latest 10 medical records in the clinic file.</p>
+            </div>
+            <a href="{{ route('vet.medical-records') }}" class="btn btn-secondary">See All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="app-table">
+                <thead>
+                    <tr><th>Created</th><th>Pet</th><th>Owner</th><th>Diagnosis</th><th>Follow-Up</th></tr>
+                </thead>
+                <tbody>
+                    @forelse($recentMedicalRecords as $record)
+                        <tr>
+                            <td>{{ $record->created_at?->format('M d, Y') ?? 'N/A' }}</td>
+                            <td>{{ $record->pet?->name ?? 'Unknown Pet' }}</td>
+                            <td>{{ $record->pet?->owner?->name ?? 'Unknown Owner' }}</td>
+                            <td>{{ \Illuminate\Support\Str::limit($record->diagnosis ?: 'No diagnosis recorded', 90) }}</td>
+                            <td>{{ $record->follow_up_date?->format('M d, Y') ?? 'Not scheduled' }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" style="text-align: center; color: #6b7280;">No medical records yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="surface-header">
+            <div>
+                <h2>Recent E-Prescriptions</h2>
+                <p class="section-copy">Latest 10 prescription records.</p>
+            </div>
+            <a href="{{ route('vet.prescriptions') }}" class="btn btn-secondary">See All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="app-table">
+                <thead>
+                    <tr><th>Issued</th><th>Pet</th><th>Medication</th><th>Dosage</th><th>Duration</th></tr>
+                </thead>
+                <tbody>
+                    @forelse($recentPrescriptions as $prescription)
+                        <tr>
+                            <td>{{ $prescription->issued_at?->format('M d, Y') ?? 'N/A' }}</td>
+                            <td>{{ $prescription->medicalRecord?->pet?->name ?? 'Unknown Pet' }}</td>
+                            <td>{{ $prescription->medication_name }}</td>
+                            <td>{{ $prescription->dosage }}</td>
+                            <td>{{ $prescription->duration }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" style="text-align: center; color: #6b7280;">No prescriptions yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="card">
         <h2>Quick Links</h2>

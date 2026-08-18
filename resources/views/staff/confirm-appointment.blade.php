@@ -49,16 +49,17 @@
                 @csrf
 
                 <div style="margin-bottom: 1.5rem;">
-                    <label for="appointment_date" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Appointment Date & Time *</label>
-                    <input 
-                        type="datetime-local" 
-                        id="appointment_date" 
-                        name="appointment_date" 
-                        style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;"
-                        value="{{ $appointment->appointment_date->format('Y-m-d\TH:i') }}"
-                        required
-                    >
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Appointment Date & Time *</label>
+                    @include('appointments.partials.calendar-picker', [
+                        'pickerId' => 'staff_confirm_appointment_picker',
+                        'selectedDate' => old('appointment_date', $appointment->appointment_date->format('Y-m-d')),
+                        'selectedTime' => old('appointment_time', $appointment->appointment_time->format('H:i')),
+                        'bookedAppointments' => $bookedAppointments ?? [],
+                    ])
                     @error('appointment_date')
+                        <p style="color: var(--color-emergency); font-size: 0.875rem; margin-top: 0.25rem;">{{ $message }}</p>
+                    @enderror
+                    @error('appointment_time')
                         <p style="color: var(--color-emergency); font-size: 0.875rem; margin-top: 0.25rem;">{{ $message }}</p>
                     @enderror
                 </div>

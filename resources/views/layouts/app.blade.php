@@ -891,6 +891,7 @@
         }
     </style>
     @yield('styles')
+    @stack('appointment-picker-styles')
 </head>
 <body>
     @php
@@ -1085,6 +1086,7 @@
             document.addEventListener('keydown', handleEsc);
         }
     </script>
+    @stack('appointment-picker-scripts')
     @yield('scripts')
 </body>
 </html>

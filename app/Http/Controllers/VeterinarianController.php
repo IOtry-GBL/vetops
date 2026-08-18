@@ -9,7 +9,9 @@ use App\Models\MedicalRecord;
 use App\Models\Pet;
 use App\Models\SymptomLog;
 use App\Models\AdherenceLog;
+use App\Models\User;
 use App\Services\AdherenceService;
+use App\Services\AppointmentScheduleService;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -41,11 +43,31 @@ class VeterinarianController extends Controller
             ? round(($prescriptionsWithLogs / $totalPrescriptions) * 100, 2)
             : 0;
 
+        $recentAppointments = Appointment::with('pet.owner')
+            ->whereHas('consultation', fn ($query) => $query->where('veterinarian_id', $vet->id))
+            ->orderByDesc('appointment_date')
+            ->orderByDesc('appointment_time')
+            ->limit(10)
+            ->get();
+
+        $recentMedicalRecords = MedicalRecord::with('pet.owner')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
+        $recentPrescriptions = EPrescription::with('medicalRecord.pet.owner')
+            ->orderByDesc('issued_at')
+            ->limit(10)
+            ->get();
+
         return view('veterinarian.dashboard', compact(
             'emergencies', 
             'triage',
             'adherenceRate',
-            'totalPrescriptions'
+            'totalPrescriptions',
+            'recentAppointments',
+            'recentMedicalRecords',
+            'recentPrescriptions'
         ));
     }
 
@@ -53,31 +75,62 @@ class VeterinarianController extends Controller
      * Display appointment management
      */
     
-    public function appointments()
+    public function appointments(Request $request)
     {
-        $pendingAppointments = Appointment::with(['pet.owner'])
-            ->where(function ($query) {
+        $search = trim((string) $request->query('search', ''));
+        $seeAll = $request->boolean('see_all');
+        $appointmentScope = function ($query) {
+            $query->where(function ($query) {
                 $query->whereHas('consultation', function ($consultationQuery) {
                     $consultationQuery->where('veterinarian_id', Auth::id());
                 })->orWhereDoesntHave('consultation');
-            })
+            });
+        };
+        $searchScope = function ($query) use ($search) {
+            if ($search === '') {
+                return;
+            }
+
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('reason_for_visit', 'like', "%{$search}%")
+                    ->orWhere('consultation_mode', 'like', "%{$search}%")
+                    ->orWhereHas('pet', function ($petQuery) use ($search) {
+                        $petQuery->where('pet_name', 'like', "%{$search}%")
+                            ->orWhere('species', 'like', "%{$search}%")
+                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
+                    });
+            });
+        };
+
+        $pendingAppointments = Appointment::with(['pet.owner'])
+            ->where($appointmentScope)
+            ->where($searchScope)
             ->where('status', 'Pending')
             ->orderBy('appointment_date')
             ->orderBy('appointment_time')
+            ->when(!$seeAll, fn ($query) => $query->limit(10))
             ->get();
 
         $approvedAppointments = Appointment::with(['pet.owner'])
-            ->where(function ($query) {
-                $query->whereHas('consultation', function ($consultationQuery) {
-                    $consultationQuery->where('veterinarian_id', Auth::id());
-                })->orWhereDoesntHave('consultation');
-            })
+            ->where($appointmentScope)
+            ->where($searchScope)
             ->where('status', 'Approved')
             ->orderBy('appointment_date')
             ->orderBy('appointment_time')
+            ->when(!$seeAll, fn ($query) => $query->limit(10))
             ->get();
 
-        return view('veterinarian.appointments', compact('pendingAppointments', 'approvedAppointments'));
+        $totalPendingAppointments = Appointment::where($appointmentScope)
+            ->where($searchScope)
+            ->where('status', 'Pending')
+            ->count();
+
+        $totalApprovedAppointments = Appointment::where($appointmentScope)
+            ->where($searchScope)
+            ->where('status', 'Approved')
+            ->count();
+
+        return view('veterinarian.appointments', compact('pendingAppointments', 'approvedAppointments', 'totalPendingAppointments', 'totalApprovedAppointments', 'search', 'seeAll'));
     }
 
     /**
@@ -85,25 +138,58 @@ class VeterinarianController extends Controller
      */
     public function medicalRecords(Request $request)
     {
-        $medicalRecords = MedicalRecord::with([
+        $search = trim((string) $request->query('search', ''));
+        $seeAll = $request->boolean('see_all');
+
+        $recordsQuery = MedicalRecord::with([
             'pet.owner',
             'prescriptions' => fn ($query) => $query->orderByDesc('issued_at'),
-        ])->orderByDesc('created_at')->get();
+        ])->when($search !== '', function ($query) use ($search) {
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('diagnosis', 'like', "%{$search}%")
+                    ->orWhere('treatment_plan', 'like', "%{$search}%")
+                    ->orWhere('vaccination_notes', 'like', "%{$search}%")
+                    ->orWhereHas('pet', function ($petQuery) use ($search) {
+                        $petQuery->where('pet_name', 'like', "%{$search}%")
+                            ->orWhere('species', 'like', "%{$search}%")
+                            ->orWhere('breed', 'like', "%{$search}%")
+                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
+                    });
+            });
+        })->orderByDesc('created_at');
 
-        $patients = $medicalRecords->pluck('pet')
-            ->filter()
-            ->unique('pet_id')
-            ->values();
+        $allMedicalRecords = (clone $recordsQuery)->get();
+        $medicalRecords = (clone $recordsQuery)
+            ->when(!$seeAll, fn ($query) => $query->limit(10))
+            ->get();
 
-        $selectedPatient = $patients->firstWhere('pet_id', (int) $request->query('patient'));
+        $owners = User::whereHas('pets.medicalRecords')
+            ->with(['pets' => fn ($query) => $query->whereHas('medicalRecords')->orderBy('pet_name')])
+            ->orderBy('full_name')
+            ->get();
 
-        if (!$selectedPatient) {
-            $selectedPatient = $patients->first();
-        }
+        $patients = $owners->flatMap->pets->unique('pet_id')->values();
+        $requestedPatientId = (int) ($request->query('pet') ?: $request->query('patient'));
+        $selectedPetFromPatientParam = $requestedPatientId
+            ? $patients->firstWhere('pet_id', $requestedPatientId)
+            : null;
 
-        $selectedPatientRecords = $selectedPatient
-            ? $medicalRecords->where('pet_id', $selectedPatient->pet_id)->values()
+        $selectedOwner = $selectedPetFromPatientParam?->owner
+            ?? ($request->query('owner')
+                ? $owners->firstWhere('user_id', (int) $request->query('owner'))
+                : null);
+
+        $ownerPets = $selectedOwner?->pets ?? collect();
+        $selectedPet = $selectedPetFromPatientParam
+            ?? ($request->query('pet')
+                ? $ownerPets->firstWhere('pet_id', (int) $request->query('pet'))
+                : null);
+        $selectedPatient = $selectedPet;
+
+        $selectedPatientRecords = $selectedPet
+            ? $allMedicalRecords->where('pet_id', $selectedPet->pet_id)->values()
             : collect();
+        $selectedPatientRecordsPreview = $seeAll ? $selectedPatientRecords : $selectedPatientRecords->take(10);
 
         $selectedPatientPrescriptionCount = $selectedPatientRecords->sum(
             fn (MedicalRecord $record) => $record->prescriptions->count()
@@ -111,10 +197,18 @@ class VeterinarianController extends Controller
 
         return view('veterinarian.medical-records', compact(
             'medicalRecords',
+            'allMedicalRecords',
+            'owners',
+            'selectedOwner',
+            'ownerPets',
+            'selectedPet',
             'patients',
             'selectedPatient',
             'selectedPatientRecords',
-            'selectedPatientPrescriptionCount'
+            'selectedPatientRecordsPreview',
+            'selectedPatientPrescriptionCount',
+            'search',
+            'seeAll'
         ));
     }
 
@@ -123,10 +217,21 @@ class VeterinarianController extends Controller
      */
     public function prescriptions(Request $request)
     {
+        $search = trim((string) $request->query('search', ''));
+        $seeAll = $request->boolean('see_all');
+
         $medicalRecords = MedicalRecord::with([
             'pet.owner',
             'prescriptions' => fn ($query) => $query->orderByDesc('issued_at'),
-        ])->orderByDesc('created_at')->get();
+        ])->when($search !== '', function ($query) use ($search) {
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('diagnosis', 'like', "%{$search}%")
+                    ->orWhereHas('pet', function ($petQuery) use ($search) {
+                        $petQuery->where('pet_name', 'like', "%{$search}%")
+                            ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
+                    });
+            });
+        })->orderByDesc('created_at')->get();
 
         $selectedRecord = $medicalRecords->firstWhere('record_id', (int) $request->query('record'));
 
@@ -134,14 +239,30 @@ class VeterinarianController extends Controller
             $selectedRecord = $medicalRecords->first();
         }
 
-        $prescriptions = EPrescription::with('medicalRecord.pet.owner')
-            ->orderByDesc('issued_at')
+        $prescriptionsQuery = EPrescription::with('medicalRecord.pet.owner')
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('medication_name', 'like', "%{$search}%")
+                        ->orWhere('dosage', 'like', "%{$search}%")
+                        ->orWhere('frequency', 'like', "%{$search}%")
+                        ->orWhere('duration', 'like', "%{$search}%")
+                        ->orWhereHas('medicalRecord.pet', function ($petQuery) use ($search) {
+                            $petQuery->where('pet_name', 'like', "%{$search}%")
+                                ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('full_name', 'like', "%{$search}%"));
+                        });
+                });
+            })
+            ->orderByDesc('issued_at');
+
+        $totalPrescriptionRows = (clone $prescriptionsQuery)->count();
+        $prescriptions = (clone $prescriptionsQuery)
+            ->when(!$seeAll, fn ($query) => $query->limit(10))
             ->get();
 
         $patientCount = $medicalRecords->pluck('pet_id')->unique()->count();
-        $issuedTodayCount = $prescriptions->filter(fn (EPrescription $prescription) => $prescription->issued_at?->isToday())->count();
+        $issuedTodayCount = EPrescription::whereDate('issued_at', today())->count();
 
-        return view('veterinarian.prescriptions', compact('medicalRecords', 'selectedRecord', 'prescriptions', 'patientCount', 'issuedTodayCount'));
+        return view('veterinarian.prescriptions', compact('medicalRecords', 'selectedRecord', 'prescriptions', 'patientCount', 'issuedTodayCount', 'totalPrescriptionRows', 'search', 'seeAll'));
     }
 
     /**
@@ -172,6 +293,37 @@ class VeterinarianController extends Controller
 
         return redirect()->route('vet.prescriptions', ['record' => $medicalRecord->record_id])
             ->with('success', 'E-prescription created successfully.');
+    }
+
+    /**
+     * Update an existing e-prescription.
+     */
+    public function updatePrescription(Request $request, EPrescription $prescription)
+    {
+        $validator = Validator::make($request->all(), [
+            'medication_name' => 'required|string|max:100',
+            'dosage' => 'required|string|max:50',
+            'frequency' => 'required|string|max:50',
+            'duration' => 'required|string|max:50',
+        ]);
+
+        $validator->after(function ($validator) use ($request) {
+            $this->validatePrescriptionTimingInputs($validator, [
+                'frequency' => $request->input('frequency'),
+                'duration' => $request->input('duration'),
+            ]);
+        });
+
+        $validated = $validator->validate();
+        $prescription->update([
+            'medication_name' => trim((string) $validated['medication_name']),
+            'dosage' => trim((string) $validated['dosage']),
+            'frequency' => AdherenceService::normalizeFrequency($validated['frequency']),
+            'duration' => AdherenceService::normalizeDuration($validated['duration']),
+        ]);
+
+        return redirect()->route('vet.prescriptions', ['record' => $prescription->record_id])
+            ->with('success', 'E-prescription updated successfully.');
     }
 
     /**
@@ -252,8 +404,9 @@ class VeterinarianController extends Controller
     {
         $pets = Pet::with('owner')->get();
         $unavailablePetIds = Appointment::query()->activeEntries()->pluck('pet_id')->all();
+        $bookedAppointments = AppointmentScheduleService::bookedAppointments();
 
-        return view('veterinarian.create-appointment', compact('pets', 'unavailablePetIds'));
+        return view('veterinarian.create-appointment', compact('pets', 'unavailablePetIds', 'bookedAppointments'));
     }
 
     /**
@@ -261,14 +414,7 @@ class VeterinarianController extends Controller
      */
     public function storeAppointment(\Illuminate\Http\Request $request)
     {
-        $appointmentDateTime = $request->input('appointment_date');
-        if ($appointmentDateTime && str_contains($appointmentDateTime, 'T') && !$request->filled('appointment_time')) {
-            [$date, $time] = explode('T', $appointmentDateTime, 2);
-            $request->merge([
-                'appointment_date' => $date,
-                'appointment_time' => $time,
-            ]);
-        }
+        AppointmentScheduleService::normalizeDateTimeInput($request);
 
         $reason = $request->input('reason_for_visit') ?? $request->input('reason');
         $request->merge(['reason' => $reason]);
@@ -289,14 +435,22 @@ class VeterinarianController extends Controller
             $request->merge(['status' => $statusMap[$normalized] ?? $request->input('status')]);
         }
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'pet_id' => 'required|exists:pets,pet_id',
-            'appointment_date' => 'required|date_format:Y-m-d|after:today',
+            'appointment_date' => 'required|date_format:Y-m-d',
             'appointment_time' => 'required|date_format:H:i',
             'consultation_mode' => 'required|in:In-clinic,Teleconsultation',
             'reason' => 'required|string|max:500',
             'status' => 'required|in:Pending,Approved,Rescheduled,Completed,Cancelled',
         ]);
+        $validator->after(function ($validator) use ($request) {
+            if ($request->filled('pet_id') && Appointment::petHasActiveEntry((int) $request->input('pet_id'))) {
+                return;
+            }
+
+            AppointmentScheduleService::validateSlot($validator, $request);
+        });
+        $validated = $validator->validate();
 
         if (Appointment::petHasActiveEntry((int) $validated['pet_id'])) {
             return back()

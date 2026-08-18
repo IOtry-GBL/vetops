@@ -52,16 +52,15 @@
             </div>
 
             <div style="margin-bottom: 1.5rem;">
-                <label for="appointment_date" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Select Date & Time *</label>
-                <input 
-                    type="datetime-local" 
-                    id="appointment_date" 
-                    name="appointment_date" 
-                    style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;"
-                    value="{{ old('appointment_date') }}"
-                    required
-                >
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Select Date & Time *</label>
+                @include('appointments.partials.calendar-picker', [
+                    'pickerId' => 'appointment_picker',
+                    'bookedAppointments' => $bookedAppointments ?? [],
+                ])
                 @error('appointment_date')
+                    <p style="color: var(--color-emergency); font-size: 0.875rem; margin-top: 0.25rem;">{{ $message }}</p>
+                @enderror
+                @error('appointment_time')
                     <p style="color: var(--color-emergency); font-size: 0.875rem; margin-top: 0.25rem;">{{ $message }}</p>
                 @enderror
             </div>
