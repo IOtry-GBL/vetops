@@ -22,7 +22,7 @@ class LoginController extends Controller
             
             // Redirect based on role
             if ($user->isSuperAdmin()) {
-                return redirect('.super-admin/dashboard');
+                return redirect('/super-admin/dashboard');
             }
 
             return match($user->role) {
