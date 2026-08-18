@@ -81,7 +81,7 @@ class AdherenceController extends Controller
 
         // Use updateOrCreate to prevent race condition and duplicate notifications
         $notification = AdherenceNotification::updateOrCreate(
-            ['adherence_id' => $adherenceLog->adherence_id],
+            ['adherence_id' => $adherenceLog->aherence_id],
             [
                 'user_id' => $user->user_id,
                 'medication_name' => $prescription->medication_name,

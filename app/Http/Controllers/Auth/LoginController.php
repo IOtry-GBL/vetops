@@ -10,7 +10,7 @@ class LoginController extends Controller
 {
     public function store(Request $request)
     {
-        $credentials = $request->validte([
+        $credentials = $request->validate([
             'email' => 'required|email',
             'password' => 'required',
         ]);
@@ -22,7 +22,7 @@ class LoginController extends Controller
             
             // Redirect based on role
             if ($user->isSuperAdmin()) {
-                return redirect('/super-admin/dashboard');
+                return redirect('.super-admin/dashboard');
             }
 
             return match($user->role) {
