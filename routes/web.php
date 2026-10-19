@@ -15,14 +15,14 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/login', function () {
-    return view('login');
+    return view('auth.login');
 })->name('login')->middleware('guest');
 
 Route::post('/login', [\App\Http\Controllers\Auth\LoginController::class, 'store'])
     ->middleware('guest');
 
 Route::get('/register', function () {
-    return view('register');
+    return view('auth.register');
 })->name('register')->middleware('guest');
 
 Route::post('/register', [\App\Http\Controllers\Auth\RegisterController::class, 'store'])
@@ -33,7 +33,7 @@ Route::post('/logout', function () {
     request()->session()->invalidate();
     request()->session()->regenerateToken();
     return redirect('/');
-})->middleware('')->name('logout');
+})->name('logout');
 
 // Authenticated Routes with Role-Based Access
 Route::middleware('auth')->group(function () {
