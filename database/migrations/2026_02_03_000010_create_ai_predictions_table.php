@@ -12,6 +12,10 @@ return new class extends Migration
             return;
         }
 
+        if (! Schema::hasTable('symptom_logs')) {
+            return;
+        }
+
         Schema::create('ai_predictions', function (Blueprint $table) {
             $table->id('prediction_id');
             $table->foreignId('pet_id')->constrained('pets', 'pet_id')->onDelete('cascade');
