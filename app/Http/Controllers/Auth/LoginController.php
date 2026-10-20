@@ -27,7 +27,7 @@ class LoginController extends Controller
 
             return match($user->role) {
                 'Pet Owner' => redirect('/pet-owner/dashboard'),
-                'Veterinarian' => redirect('/veterinarian/dashboard'),
+                'Veterinarian' => redirect('/vet/dashboard'),
                 'Staff' => redirect('/staff/dashboard'),
                 'Admin' => redirect('/admin/dashboard'),
                 default => redirect('/auth/login'),
